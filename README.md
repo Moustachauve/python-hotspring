@@ -10,8 +10,8 @@
 Asynchronous Python client for Hot Spring Connected Spa Kit 2.
 
 > [!WARNING]
-> This library is currently in heavy development. Not all features might work 
-> perfectly, and some features may not be fully tested as they depend on the 
+> This library is currently in heavy development. Not all features might work
+> perfectly, and some features may not be fully tested as they depend on the
 > physical hardware available for testing.
 
 ## About
@@ -152,7 +152,7 @@ poetry run pytest
 
 The original setup of this repository is by @Moustachauve.
 
-The structure of this library is inspired by [python-wled][python-wled] from 
+The structure of this library is inspired by [python-wled][python-wled] from
 @frenck and [pytechnove][pytechnove] from @Moustachauve.
 
 [build-shield]: https://github.com/Moustachauve/python-hotspring/actions/workflows/tests.yaml/badge.svg

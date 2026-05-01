@@ -12,15 +12,19 @@ import sys
 # Add src to sys.path so we can import hotspring
 sys.path.append(os.path.join(os.getcwd(), "src"))
 
+# pylint: disable=wrong-import-position
 from hotspring import HotSpring
+from hotspring.exceptions import HotSpringError
 
 
-async def main():
+async def main() -> None:
+    """Run demo to turn off all lights."""
     host = "192.168.11.88"
     async with HotSpring(host) as spa:
         print(f"Connecting to spa at {host}...")
         try:
             await spa.update()
+            assert spa.spa is not None
 
             enabled_zones = [z for z in spa.spa.light_zones if z.is_enabled]
             print(f"Found {len(enabled_zones)} enabled light zones.")
@@ -34,8 +38,9 @@ async def main():
 
             print("All turn-off commands sent.")
 
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        except HotSpringError as e:
+            print(f"A HotSpring error occurred: {e}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

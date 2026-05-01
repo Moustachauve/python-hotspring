@@ -148,6 +148,15 @@ select = ["ALL"]
   "S101",    # Use of assert detected — expected in test code
   "SLF001",  # Private member access acceptable for test verification
 ]
+"demo/**/*.py" = [
+  "T201",    # allow print statements in demo
+  "S101",    # allow assert in demo
+  "PTH118",  # allow os.path.join
+  "PTH109",  # allow os.getcwd
+  "INP001",  # implicit namespace package is fine for demo
+  "ERA001",  # commented out code is fine in demo
+  "E501",    # line too long is fine
+]
 
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
@@ -160,7 +169,7 @@ known-first-party = ["hotspring"]
 max-complexity = 25
 
 [tool.codespell]
-ignore-words-list = "hass"
+ignore-words-list = "hass,loopUp,loopDown"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"

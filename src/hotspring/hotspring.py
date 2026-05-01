@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Self
 
 import aiohttp
 import backoff
@@ -59,8 +59,8 @@ class HotSpring:
         self,
         uri: str = "",
         method: str = "GET",
-        data: dict[str, Any] | None = None,
-    ) -> Any:
+        data: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         """Handle a request to the Hot Spring HNA.
 
         A generic method for sending/handling HTTP requests done against
@@ -125,8 +125,9 @@ class HotSpring:
             body = await response.text()
             try:
                 response_data = json.loads(body)
-            except json.JSONDecodeError:
-                response_data = body
+            except json.JSONDecodeError as exc:
+                msg = f"Invalid JSON response from {uri}: {body[:200]}"
+                raise HotSpringError(msg) from exc
 
         except asyncio.TimeoutError as exception:
             msg = f"Timeout occurred while connecting to Hot Spring HNA at {self.host}"
@@ -136,6 +137,10 @@ class HotSpring:
                 f"Error occurred while communicating with Hot Spring HNA at {self.host}"
             )
             raise HotSpringConnectionError(msg) from exception
+
+        if not isinstance(response_data, dict):
+            msg = f"Unexpected response type from {uri}"
+            raise HotSpringError(msg)
 
         return response_data
 
@@ -157,9 +162,6 @@ class HotSpring:
         """
         # Fetch main status
         status_data = await self.request("/status")
-        if not status_data:
-            msg = "No data was returned by the spa"
-            raise HotSpringError(msg)
 
         if self.spa is None:
             self.spa = Spa(status_data)
@@ -169,16 +171,14 @@ class HotSpring:
         # Fetch identity/startup info
         try:
             startup_data = await self.request("/startup")
-            if isinstance(startup_data, dict):
-                self.spa.update_info(startup_data)
+            self.spa.update_info(startup_data)
         except HotSpringError:
             pass  # Non-critical; identity may already be populated
 
         # Fetch connection status
         try:
             connect_data = await self.request("/spaConnectStatus")
-            if isinstance(connect_data, dict):
-                self.spa.update_connection_status(connect_data)
+            self.spa.update_connection_status(connect_data)
         except HotSpringError:
             pass  # Non-critical
 
@@ -200,9 +200,6 @@ class HotSpring:
 
         """
         data = await self.request("/getFWIQData")
-        if not data:
-            msg = "No water care data was returned by the spa"
-            raise HotSpringError(msg)
 
         if self.spa is None:
             msg = "Call update() before update_water_care()"
@@ -227,9 +224,6 @@ class HotSpring:
 
         """
         data = await self.request("/addDebugData")
-        if not data:
-            msg = "No diagnostic data was returned by the spa"
-            raise HotSpringError(msg)
 
         if self.spa is None:
             msg = "Call update() before update_diagnostics()"
@@ -251,9 +245,6 @@ class HotSpring:
 
         """
         data = await self.request("/spaConnectStatus")
-        if not data:
-            msg = "No connection status data was returned by the spa"
-            raise HotSpringError(msg)
 
         if self.spa is None:
             msg = "Call update() before update_connection_status()"
@@ -262,7 +253,7 @@ class HotSpring:
         self.spa.update_connection_status(data)
         return self.spa.connection_status
 
-    async def _send_command(self, payload: dict[str, Any]) -> None:
+    async def _send_command(self, payload: dict[str, object]) -> None:
         """Send a control command to the spa via POST /spaManager.
 
         All control commands are sent as JSON payloads to
