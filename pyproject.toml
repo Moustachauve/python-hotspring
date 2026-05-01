@@ -123,6 +123,9 @@ addopts = "--cov"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
+[tool.ruff]
+exclude = ["demo"]
+
 [tool.ruff.lint]
 ignore = [
   "ANN401", # Opinionated warning on disallowing dynamically typed expressions

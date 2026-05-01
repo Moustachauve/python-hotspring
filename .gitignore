@@ -15,7 +15,7 @@ venv/
 ENV/
 
 # Poetry
-poetry.lock
+# poetry.lock is committed for reproducible CI builds
 
 # IDE
 .idea/
@@ -30,6 +30,7 @@ poetry.lock
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 
 # OS
 .DS_Store
