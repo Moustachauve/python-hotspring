@@ -1,0 +1,40 @@
+---
+name: Typing
+
+# yamllint disable-line rule:truthy
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DEFAULT_PYTHON: "3.12"
+
+permissions:
+  contents: read
+
+jobs:
+  mypy:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⤵️ Check out code from GitHub
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 🏗 Set up Poetry
+        run: pipx install poetry
+      - name: 🏗 Set up Python ${{ env.DEFAULT_PYTHON }}
+        id: python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+          cache: "poetry"
+      - name: 🏗 Install workflow dependencies
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+      - name: 🏗 Install Python dependencies
+        run: poetry install --no-interaction
+      - name: 🚀 Run mypy
+        run: poetry run mypy src/hotspring

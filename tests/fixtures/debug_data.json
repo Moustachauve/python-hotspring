@@ -1,0 +1,21 @@
+{
+  "debugData": {
+    "status": {
+      "spaFailureState": "Spa_Ok",
+      "heaterError": "0",
+      "powerFrequency": "60",
+      "pressureSwitchStatus": "1",
+      "circulationPumpFlowStatus": "1",
+      "regulationThermistorTempStatus": "1",
+      "limitThermistorStatus": "1",
+      "L1_N_Volts": "120",
+      "L2_N_Volts": "120",
+      "Heater_Volts": "240",
+      "jet3_Volts": "0",
+      "jet1_jet2_blowerPower": "1500",
+      "smallLoadsPower": "200",
+      "heaterPower": "4000",
+      "jet3Power": "0"
+    }
+  }
+}

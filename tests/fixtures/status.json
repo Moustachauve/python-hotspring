@@ -1,0 +1,180 @@
+{
+  "JET": {
+    "JET1": {
+      "config": {
+        "speed": "dualSpeed"
+      },
+      "status": {
+        "speed": "highSpeed",
+        "jet_1_ON_sec": 9678336
+      }
+    },
+    "JET2": {
+      "config": {
+        "JET2": "enable",
+        "speed": "singleSpeed"
+      },
+      "status": {
+        "speed": "off",
+        "jet_2_ON_sec": 0
+      }
+    },
+    "JET3": {
+      "config": {
+        "JET3": "disable",
+        "concurrent": "disable"
+      },
+      "status": {
+        "speed": "off",
+        "jet_3_ON_sec": 0,
+        "current": 0
+      }
+    }
+  },
+  "heater": {
+    "config": {
+      "temperatureUnit": "DegF",
+      "heatPumptranquil": "disable",
+      "heaterConcurrent": "enable",
+      "heatPumpConcurrent": "disable"
+    },
+    "status": {
+      "heater": "on",
+      "heaterLock": "off",
+      "heatpumpInstalled": "notinstalled",
+      "heatingMode": "heatWithBoost",
+      "heaterCurrent": 25857,
+      "heaterHours": 2297600,
+      "setWaterTemperature": "100F",
+      "currentWaterTemperature": "100F",
+      "temperatureUnit": "DegF"
+    }
+  },
+  "cleanCycle": {
+    "status": {
+      "cleanCycle": "enable",
+      "vanishingAct": "off"
+    },
+    "config": {
+      "twentyFourHourTimer": "disable"
+    }
+  },
+  "spaLock": {
+    "config": {
+      "spaLock_config": "disable"
+    },
+    "status": {
+      "spaLock": "off"
+    }
+  },
+  "blower": {
+    "config": {
+      "blower": "disable",
+      "blowerConcurrent": "disable"
+    },
+    "status": {
+      "blower": "disable"
+    }
+  },
+  "lights": {
+    "zone1": {
+      "config": {
+        "zone_1": "enable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 5,
+        "color": "BLUE"
+      }
+    },
+    "zone2": {
+      "config": {
+        "zone_2": "disable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 5,
+        "color": "BLUE"
+      }
+    },
+    "zone3": {
+      "config": {
+        "zone_3": "disable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 5,
+        "color": "BLUE"
+      }
+    },
+    "zone4": {
+      "config": {
+        "zone_4": "disable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 5,
+        "color": "BLUE"
+      }
+    }
+  },
+  "logoLight": {
+    "status": {
+      "brightness": "brightness_level_2"
+    }
+  },
+  "waterCare": {
+    "status": {
+      "cartridgeInstalled": "installed",
+      "10DayTimer": 0,
+      "120DayTimer": 0,
+      "level": 3,
+      "SystemEnable": "enable",
+      "AceMode": "normal",
+      "boost": "inactive",
+      "saltLevel": "LOW_SALT",
+      "saltValue": 0
+    }
+  },
+  "FWIQ_Parameters": {
+    "current_Current_CompConductivity": 1500,
+    "current_ORP": 650,
+    "current_chlorine": 3.2,
+    "current_pH": 7.5,
+    "current_SensorLife_Percentage": 85
+  },
+  "energySavings": {
+    "energySaving1": {
+      "status": {
+        "mode": 0,
+        "startHour": 0,
+        "startMinute": 0,
+        "duration": 0
+      }
+    },
+    "energySaving2": {
+      "status": {
+        "mode": 0,
+        "startHour": 0,
+        "startMinute": 0,
+        "duration": 0
+      }
+    }
+  },
+  "productVersions": {
+    "status": {
+      "ControlBoxFirmwareVersion": "EG25.2100K0",
+      "ControlPanelFirmwareVersion": "HT25.1102F0",
+      "FWSSFirmwareVersion": "105",
+      "FWIQFirmwareVersion": "",
+      "AMPFirmwareVersion": "",
+      "CoolZoneFirmwareVersion": "",
+      "DosingFirmwareVersion": "",
+      "LogolightFirmwareVersion": ""
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "waterCare": {
+    "status": {
+      "FWIQstatus": {
+        "FWIQinstalled": "notinstalled",
+        "pH": -1.0,
+        "Chlorine": -1.0,
+        "ORP": -1,
+        "Conductivity": -1,
+        "SensorLife": -1.0,
+        "SystemState": "disabled",
+        "Cl_CalibrationFactor": 1.0,
+        "pH_CalibrationFactor": 0.0,
+        "Regional_Cl_Selection": "1-5ppm"
+      }
+    }
+  }
+}

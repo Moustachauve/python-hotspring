@@ -1,0 +1,164 @@
+[tool.poetry]
+authors = ["Christophe Gagnier <christopheextensions@gmail.com>"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: AsyncIO",
+  "Intended Audience :: Developers",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+description = "Asynchronous Python client for Hot Spring Connected Spa Kit 2."
+documentation = "https://github.com/Moustachauve/python-hotspring"
+homepage = "https://github.com/Moustachauve/python-hotspring"
+keywords = ["hotspring", "spa", "hot-tub", "home-assistant", "iq2020"]
+license = "MIT"
+maintainers = ["Christophe Gagnier <christopheextensions@gmail.com>"]
+name = "python-hotspring"
+packages = [
+  {include = "hotspring", from = "src"},
+]
+readme = "README.md"
+repository = "https://github.com/Moustachauve/python-hotspring"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+aiohttp = ">=3.0.0"
+awesomeversion = ">=22.1.0"
+backoff = ">=2.2.0"
+python = "^3.12"
+yarl = ">=1.6.0"
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/Moustachauve/python-hotspring/issues"
+Changelog = "https://github.com/Moustachauve/python-hotspring/releases"
+
+[tool.poetry.group.dev.dependencies]
+aresponses = "3.0.0"
+codespell = "2.4.2"
+covdefaults = "2.3.0"
+coverage = {version = "7.13.5", extras = ["toml"]}
+mypy = "1.20.1"
+pre-commit-hooks = "6.0.0"
+prek = "0.3.9"
+pylint = "4.0.5"
+pytest = "9.0.3"
+pytest-asyncio = "1.3.0"
+pytest-cov = "7.1.0"
+ruff = "0.15.11"
+safety = "3.7.0"
+yamllint = "1.38.0"
+
+[tool.coverage.run]
+plugins = ["covdefaults"]
+source = ["hotspring"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.mypy]
+platform = "linux"
+python_version = "3.12"
+follow_imports = "normal"
+ignore_missing_imports = true
+
+# be strict
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+no_implicit_reexport = true
+strict_optional = true
+warn_incomplete_stub = true
+warn_no_return = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.pylint.MASTER]
+ignore = ["tests"]
+
+[tool.pylint.BASIC]
+good-names = [
+  "_",
+  "ex",
+  "fp",
+  "i",
+  "id",
+  "j",
+  "k",
+  "on",
+  "ph",
+  "Run",
+  "T",
+]
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = [
+  "too-few-public-methods",
+  "duplicate-code",
+  "format",
+  "unsubscriptable-object",
+]
+
+[tool.pylint.SIMILARITIES]
+ignore-imports = true
+
+[tool.pylint.FORMAT]
+max-line-length = 88
+
+[tool.pylint.DESIGN]
+max-attributes = 30
+
+[tool.pytest.ini_options]
+addopts = "--cov"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff.lint]
+ignore = [
+  "ANN401", # Opinionated warning on disallowing dynamically typed expressions
+  "D203",   # Conflicts with other rules
+  "D213",   # Conflicts with other rules
+  "D417",   # False positives in some occasions
+  "PLR2004", # Just annoying, not really useful
+
+  # Conflicts with the Ruff formatter
+  "COM812",
+  "ISC001",
+]
+select = ["ALL"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+  "FBT001",  # Boolean positional args are idiomatic in parametrized tests
+  "FBT002",  # Boolean defaults are idiomatic in parametrized tests
+  "PLC0415", # Inline imports are acceptable in tests
+  "S101",    # Use of assert detected — expected in test code
+  "SLF001",  # Private member access acceptable for test verification
+]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["hotspring"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.codespell]
+ignore-words-list = "hass"
+
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
