@@ -9,19 +9,22 @@ with the physical hardware.
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # Add src to sys.path so we can import hotspring
 sys.path.append(os.path.join(os.getcwd(), "src"))
 
+# pylint: disable=wrong-import-position
 from hotspring import HotSpring
 
 
-async def main():
+async def main() -> None:
+    """Run full test suite."""
     async with HotSpring("192.168.11.88") as spa:
         print("Fetching spa state...")
         await spa.update()
+        assert spa.spa is not None
 
         print(f"Current Temperature: {spa.spa.heater.current_temperature}")
         print(f"Set Temperature: {spa.spa.heater.set_temperature}")
@@ -39,6 +42,7 @@ async def main():
             await asyncio.sleep(2)
 
             await spa.update()
+            assert spa.spa is not None
             print(f"New Set Temperature: {spa.spa.heater.set_temperature}")
 
             print(f"Reverting temperature to {target}...")
@@ -56,6 +60,7 @@ async def main():
 
         await asyncio.sleep(2)
         await spa.update()
+        assert spa.spa is not None
         zone1 = next((z for z in spa.spa.light_zones if z.zone_id == 1), None)
         print(f"New color: {zone1.color if zone1 else None}")
 

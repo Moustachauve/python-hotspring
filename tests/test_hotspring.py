@@ -81,20 +81,41 @@ class TestUpdate:
         assert client.spa is spa
 
     async def test_update_empty_response(self, aresponses: ResponsesMockServer) -> None:
-        """Test update with empty response raises error."""
+        """Test update with non-JSON response raises error."""
         aresponses.add(
             "192.168.1.100",
             "/status",
             "GET",
             Response(
                 status=200,
-                headers={"Content-Type": "application/json"},
-                text="{}",
+                headers={"Content-Type": "text/html"},
+                text="not json",
+            ),
+        )
+        # Backoff retries 3 times
+        aresponses.add(
+            "192.168.1.100",
+            "/status",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "text/html"},
+                text="not json",
+            ),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/status",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "text/html"},
+                text="not json",
             ),
         )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
-            with pytest.raises(HotSpringError, match="No data"):
+            with pytest.raises(HotSpringError, match="Invalid JSON"):
                 await client.update()
 
     async def test_update_reuses_spa_object(
@@ -189,7 +210,7 @@ class TestCommands:
         async def handler(request: aiohttp.web.Request) -> Response:
             data = await request.json()
             assert data == {"heater": {"control": {"temperatureABS": "102"}}}
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -204,7 +225,7 @@ class TestCommands:
         async def handler(request: aiohttp.web.Request) -> Response:
             data = await request.json()
             assert data == {"JET": {"JET1": {"control": "highSpeed"}}}
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -231,7 +252,7 @@ class TestCommands:
                     }
                 }
             }
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -248,7 +269,7 @@ class TestCommands:
             assert data == {
                 "lights": {"control": {"Zone1": {"control": {"Intensity": "off"}}}}
             }
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -265,7 +286,7 @@ class TestCommands:
             assert data == {
                 "lights": {"control": {"Zone1": {"control": {"Intensity": "fullon"}}}}
             }
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -294,7 +315,7 @@ class TestCommands:
                     }
                 }
             }
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -309,7 +330,7 @@ class TestCommands:
         async def handler(request: aiohttp.web.Request) -> Response:
             data = await request.json()
             assert data == {"heater": {"control": {"heatingMode": "heatWithBoost"}}}
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -324,7 +345,7 @@ class TestCommands:
         async def handler(request: aiohttp.web.Request) -> Response:
             data = await request.json()
             assert data == {"cleanCycle": {"control": {"cleanCycle": "on"}}}
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -339,7 +360,7 @@ class TestCommands:
         async def handler(request: aiohttp.web.Request) -> Response:
             data = await request.json()
             assert data == {"blower": {"control": "on"}}
-            return Response(status=200, text="ok")
+            return Response(status=200, text='{"status": "ok"}')
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
@@ -410,4 +431,5 @@ class TestConnection:
         async with HotSpring(host="192.168.1.100") as client:
             await client.update()
             assert client.session is not None
+            # pylint: disable=protected-access
             assert client._close_session is True

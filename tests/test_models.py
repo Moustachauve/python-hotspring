@@ -29,6 +29,7 @@ from hotspring.models import (
     SpaLock,
     Versions,
     WaterCare,
+    _parse_temperature,
 )
 
 
@@ -115,9 +116,9 @@ class TestEnums:
 class TestHeater:
     """Tests for Heater model parsing."""
 
-    def test_from_dict(self, status_response: dict) -> None:
+    def test_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing heater from a full status response."""
-        heater = Heater.from_dict(status_response["heater"])
+        heater = Heater.from_dict(status_response["heater"])  # type: ignore[arg-type]
         assert heater.is_on is True
         assert heater.heater_lock is False
         assert heater.heatpump_installed is False
@@ -161,9 +162,9 @@ class TestHeater:
 class TestJet:
     """Tests for Jet model parsing."""
 
-    def test_list_from_dict(self, status_response: dict) -> None:
+    def test_list_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing all jets from status response."""
-        jets = Jet.list_from_dict(status_response["JET"])
+        jets = Jet.list_from_dict(status_response["JET"])  # type: ignore[arg-type]
         assert len(jets) == 3
 
         # JET1 should be enabled and running
@@ -191,7 +192,7 @@ class TestJet:
             "JET3": {"config": {}, "status": {"speed": "off"}},
             "JET1": {"config": {}, "status": {"speed": "off"}},
         }
-        jets = Jet.list_from_dict(data)
+        jets = Jet.list_from_dict(data)  # type: ignore[arg-type]
         assert jets[0].jet_id == 1
         assert jets[1].jet_id == 3
 
@@ -199,9 +200,9 @@ class TestJet:
 class TestBlower:
     """Tests for Blower model parsing."""
 
-    def test_from_dict_disabled(self, status_response: dict) -> None:
+    def test_from_dict_disabled(self, status_response: dict[str, object]) -> None:
         """Test parsing disabled blower."""
-        blower = Blower.from_dict(status_response["blower"])
+        blower = Blower.from_dict(status_response["blower"])  # type: ignore[arg-type]
         assert blower.is_enabled is False
         assert blower.is_on is False
 
@@ -217,9 +218,9 @@ class TestBlower:
 class TestLightZone:
     """Tests for LightZone model parsing."""
 
-    def test_list_from_dict(self, status_response: dict) -> None:
+    def test_list_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing all light zones from status response."""
-        zones = LightZone.list_from_dict(status_response["lights"])
+        zones = LightZone.list_from_dict(status_response["lights"])  # type: ignore[arg-type]
         assert len(zones) == 4
 
         # Zone 1 should be on with Blue color (API sends "BLUE")
@@ -244,9 +245,9 @@ class TestLightZone:
 class TestLogoLight:
     """Tests for LogoLight model parsing."""
 
-    def test_from_dict(self, status_response: dict) -> None:
+    def test_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing logo light."""
-        logo = LogoLight.from_dict(status_response["logoLight"])
+        logo = LogoLight.from_dict(status_response["logoLight"])  # type: ignore[arg-type]
         assert logo.brightness == BrightnessLevel.LEVEL_2
 
     def test_from_empty_dict(self) -> None:
@@ -258,9 +259,9 @@ class TestLogoLight:
 class TestCleanCycle:
     """Tests for CleanCycle model parsing."""
 
-    def test_from_dict(self, status_response: dict) -> None:
+    def test_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing clean cycle."""
-        clean = CleanCycle.from_dict(status_response["cleanCycle"])
+        clean = CleanCycle.from_dict(status_response["cleanCycle"])  # type: ignore[arg-type]
         assert clean.is_enabled is True
         assert clean.vanishing_act is False
 
@@ -268,9 +269,9 @@ class TestCleanCycle:
 class TestSpaLock:
     """Tests for SpaLock model parsing."""
 
-    def test_from_dict_unlocked(self, status_response: dict) -> None:
+    def test_from_dict_unlocked(self, status_response: dict[str, object]) -> None:
         """Test parsing unlocked spa."""
-        lock = SpaLock.from_dict(status_response["spaLock"])
+        lock = SpaLock.from_dict(status_response["spaLock"])  # type: ignore[arg-type]
         assert lock.is_locked is False
 
     def test_from_dict_locked(self) -> None:
@@ -282,9 +283,9 @@ class TestSpaLock:
 class TestWaterCare:
     """Tests for WaterCare model parsing."""
 
-    def test_from_dict(self, status_response: dict) -> None:
+    def test_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing water care data."""
-        water = WaterCare.from_dict(status_response["waterCare"])
+        water = WaterCare.from_dict(status_response["waterCare"])  # type: ignore[arg-type]
         assert water.cartridge_installed is True
         assert water.ten_day_timer == 0
         assert water.one_twenty_day_timer == 0
@@ -299,9 +300,9 @@ class TestWaterCare:
 class TestFreshWaterIQ:
     """Tests for FreshWaterIQ model parsing."""
 
-    def test_from_status_dict(self, status_response: dict) -> None:
+    def test_from_status_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing FWIQ data from /status FWIQ_Parameters section."""
-        fwiq = FreshWaterIQ.from_dict(status_response["FWIQ_Parameters"])
+        fwiq = FreshWaterIQ.from_dict(status_response["FWIQ_Parameters"])  # type: ignore[arg-type]
         assert fwiq.conductivity == 1500
         assert fwiq.orp == 650
         assert fwiq.chlorine == 3.2
@@ -309,7 +310,7 @@ class TestFreshWaterIQ:
         assert fwiq.sensor_life_percentage == 85.0
         assert fwiq.installed is True  # Flat format assumes installed
 
-    def test_from_fwiq_endpoint(self, fwiq_response: dict) -> None:
+    def test_from_fwiq_endpoint(self, fwiq_response: dict[str, object]) -> None:
         """Test parsing FWIQ data from /getFWIQData endpoint (nested)."""
         fwiq = FreshWaterIQ.from_dict(fwiq_response)
         assert fwiq.installed is False
@@ -330,9 +331,9 @@ class TestFreshWaterIQ:
 class TestEnergySaving:
     """Tests for EnergySaving model parsing."""
 
-    def test_list_from_dict(self, status_response: dict) -> None:
+    def test_list_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing energy saving schedules."""
-        schedules = EnergySaving.list_from_dict(status_response["energySavings"])
+        schedules = EnergySaving.list_from_dict(status_response["energySavings"])  # type: ignore[arg-type]
         assert len(schedules) == 2
         assert schedules[0].schedule_id == 1
         assert schedules[0].mode == 0
@@ -342,9 +343,9 @@ class TestEnergySaving:
 class TestVersions:
     """Tests for Versions model parsing."""
 
-    def test_from_dict(self, status_response: dict) -> None:
+    def test_from_dict(self, status_response: dict[str, object]) -> None:
         """Test parsing firmware versions."""
-        versions = Versions.from_dict(status_response["productVersions"]["status"])
+        versions = Versions.from_dict(status_response["productVersions"]["status"])  # type: ignore[index]
         assert versions.control_box == "EG25.2100K0"
         assert versions.control_panel == "HT25.1102F0"
         assert versions.fwss == "105"
@@ -355,7 +356,9 @@ class TestVersions:
 class TestConnectionStatus:
     """Tests for ConnectionStatus model parsing."""
 
-    def test_from_dict_connected(self, connect_status_response: dict) -> None:
+    def test_from_dict_connected(
+        self, connect_status_response: dict[str, object]
+    ) -> None:
         """Test parsing connection status when connected."""
         status = ConnectionStatus.from_dict(connect_status_response)
         assert status.spa_connected is True
@@ -374,7 +377,7 @@ class TestConnectionStatus:
 class TestDiagnostics:
     """Tests for Diagnostics model parsing."""
 
-    def test_from_dict(self, debug_data_response: dict) -> None:
+    def test_from_dict(self, debug_data_response: dict[str, object]) -> None:
         """Test parsing diagnostics data."""
         diag = Diagnostics.from_dict(debug_data_response)
         assert diag.spa_failure_state == SpaFailureState.OK
@@ -393,7 +396,7 @@ class TestDiagnostics:
 class TestSpaInfo:
     """Tests for SpaInfo model parsing."""
 
-    def test_from_dict(self, startup_response: dict) -> None:
+    def test_from_dict(self, startup_response: dict[str, object]) -> None:
         """Test parsing spa info from startup response."""
         info = SpaInfo.from_dict(startup_response)
         assert info.hostname == "ConnectedSpa_C59C9C"
@@ -413,7 +416,7 @@ class TestSpaInfo:
 class TestSpa:
     """Tests for the top-level Spa model."""
 
-    def test_full_status_parsing(self, status_response: dict) -> None:
+    def test_full_status_parsing(self, status_response: dict[str, object]) -> None:
         """Test parsing a complete /status response into a Spa object."""
         spa = Spa(status_response)
 
@@ -435,7 +438,7 @@ class TestSpa:
         assert spa.blower.is_enabled is False
         assert spa.logo_light.brightness == BrightnessLevel.LEVEL_2
 
-    def test_update_from_dict(self, status_response: dict) -> None:
+    def test_update_from_dict(self, status_response: dict[str, object]) -> None:
         """Test updating an existing Spa from new data."""
         spa = Spa(status_response)
         assert spa.heater.is_on is True
@@ -447,20 +450,22 @@ class TestSpa:
         assert spa.heater.is_on is False
         assert spa.heater.set_temperature == 98.0
 
-    def test_update_info(self, startup_response: dict) -> None:
+    def test_update_info(self, startup_response: dict[str, object]) -> None:
         """Test updating spa info."""
         spa = Spa({})
         spa.update_info(startup_response)
         assert spa.info.hostname == "ConnectedSpa_C59C9C"
         assert spa.info.sna_ready is True
 
-    def test_update_connection_status(self, connect_status_response: dict) -> None:
+    def test_update_connection_status(
+        self, connect_status_response: dict[str, object]
+    ) -> None:
         """Test updating connection status."""
         spa = Spa({})
         spa.update_connection_status(connect_status_response)
         assert spa.connection_status.spa_connected is True
 
-    def test_update_diagnostics(self, debug_data_response: dict) -> None:
+    def test_update_diagnostics(self, debug_data_response: dict[str, object]) -> None:
         """Test updating diagnostics."""
         spa = Spa({})
         spa.update_diagnostics(debug_data_response)
@@ -483,6 +488,4 @@ class TestSpa:
         self, value: str | int | None, expected: float | None
     ) -> None:
         """Test temperature parsing from various input formats."""
-        from hotspring.models import _parse_temperature
-
         assert _parse_temperature(value) == expected

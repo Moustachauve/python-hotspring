@@ -10,7 +10,7 @@ import pytest
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
-def load_fixture(name: str) -> dict:
+def load_fixture(name: str) -> dict[str, object]:
     """Load a JSON fixture file.
 
     Args:
@@ -22,34 +22,34 @@ def load_fixture(name: str) -> dict:
         The parsed JSON as a dict.
 
     """
-    return json.loads((FIXTURES_DIR / name).read_text())
+    return json.loads((FIXTURES_DIR / name).read_text())  # type: ignore[no-any-return]
 
 
 @pytest.fixture
-def status_response() -> dict:
+def status_response() -> dict[str, object]:
     """Return the full /status fixture data."""
     return load_fixture("status.json")
 
 
 @pytest.fixture
-def startup_response() -> dict:
+def startup_response() -> dict[str, object]:
     """Return the /startup fixture data."""
     return load_fixture("startup.json")
 
 
 @pytest.fixture
-def connect_status_response() -> dict:
+def connect_status_response() -> dict[str, object]:
     """Return the /spaConnectStatus fixture data."""
     return load_fixture("spa_connect_status.json")
 
 
 @pytest.fixture
-def fwiq_response() -> dict:
+def fwiq_response() -> dict[str, object]:
     """Return the /getFWIQData fixture data."""
     return load_fixture("fwiq_data.json")
 
 
 @pytest.fixture
-def debug_data_response() -> dict:
+def debug_data_response() -> dict[str, object]:
     """Return the /addDebugData fixture data."""
     return load_fixture("debug_data.json")

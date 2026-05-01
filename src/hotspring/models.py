@@ -1,9 +1,14 @@
 """Models for Hot Spring Connected Spa Kit 2."""
+# mypy: disable-error-code="union-attr, arg-type, call-overload, attr-defined"
+# Rationale: This module parses nested JSON dicts typed as dict[str, object].
+# The .get() return type is `object`, which mypy cannot narrow without runtime
+# isinstance checks on every access. This is a known typing limitation for
+# hand-parsed JSON; schema libraries (mashumaro, pydantic) solve this at the
+# cost of an extra dependency.
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from .const import (
     BrightnessLevel,
@@ -38,7 +43,7 @@ class Spa:
     connection_status: ConnectionStatus
     diagnostics: Diagnostics
 
-    def __init__(self, data: dict[str, Any]) -> None:
+    def __init__(self, data: dict[str, object]) -> None:
         """Initialize a Spa from the full API response.
 
         Args:
@@ -48,7 +53,7 @@ class Spa:
         """
         self.update_from_dict(data)
 
-    def update_from_dict(self, data: dict[str, Any]) -> Spa:
+    def update_from_dict(self, data: dict[str, object]) -> Spa:
         """Update the Spa object from a /status API response.
 
         Args:
@@ -83,7 +88,7 @@ class Spa:
 
         return self
 
-    def update_info(self, data: dict[str, Any]) -> None:
+    def update_info(self, data: dict[str, object]) -> None:
         """Update spa identity from /startup and /spamodel responses.
 
         Args:
@@ -93,7 +98,7 @@ class Spa:
         """
         self.info = SpaInfo.from_dict(data)
 
-    def update_connection_status(self, data: dict[str, Any]) -> None:
+    def update_connection_status(self, data: dict[str, object]) -> None:
         """Update connection status from /spaConnectStatus response.
 
         Args:
@@ -103,7 +108,7 @@ class Spa:
         """
         self.connection_status = ConnectionStatus.from_dict(data)
 
-    def update_diagnostics(self, data: dict[str, Any]) -> None:
+    def update_diagnostics(self, data: dict[str, object]) -> None:
         """Update diagnostics from /addDebugData response.
 
         Args:
@@ -113,7 +118,7 @@ class Spa:
         """
         self.diagnostics = Diagnostics.from_dict(data)
 
-    def update_freshwater_iq(self, data: dict[str, Any]) -> None:
+    def update_freshwater_iq(self, data: dict[str, object]) -> None:
         """Update FreshWater IQ data from /getFWIQData response.
 
         Args:
@@ -138,7 +143,7 @@ class SpaInfo:
     sna_ready: bool
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> SpaInfo:
+    def from_dict(data: dict[str, object]) -> SpaInfo:
         """Create a SpaInfo from API response data.
 
         Args:
@@ -174,7 +179,7 @@ class Heater:  # pylint: disable=too-many-instance-attributes
     temperature_unit: TemperatureUnit
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> Heater:
+    def from_dict(data: dict[str, object]) -> Heater:
         """Create a Heater from API response data.
 
         Args:
@@ -213,7 +218,7 @@ class Jet:
     on_seconds: int
 
     @staticmethod
-    def from_dict(jet_id: int, data: dict[str, Any]) -> Jet:
+    def from_dict(jet_id: int, data: dict[str, object]) -> Jet:
         """Create a Jet from API response data.
 
         Args:
@@ -245,7 +250,7 @@ class Jet:
         )
 
     @staticmethod
-    def list_from_dict(data: dict[str, Any]) -> list[Jet]:
+    def list_from_dict(data: dict[str, object]) -> list[Jet]:
         """Parse all jets from the JET section of the /status response.
 
         Args:
@@ -276,7 +281,7 @@ class Blower:
     is_on: bool
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> Blower:
+    def from_dict(data: dict[str, object]) -> Blower:
         """Create a Blower from API response data.
 
         Args:
@@ -309,7 +314,7 @@ class LightZone:
     loop_speed: int
 
     @staticmethod
-    def from_dict(zone_id: int, data: dict[str, Any]) -> LightZone:
+    def from_dict(zone_id: int, data: dict[str, object]) -> LightZone:
         """Create a LightZone from API response data.
 
         Args:
@@ -346,7 +351,7 @@ class LightZone:
         )
 
     @staticmethod
-    def list_from_dict(data: dict[str, Any]) -> list[LightZone]:
+    def list_from_dict(data: dict[str, object]) -> list[LightZone]:
         """Parse all light zones from the lights section.
 
         Args:
@@ -376,7 +381,7 @@ class LogoLight:
     brightness: BrightnessLevel
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> LogoLight:
+    def from_dict(data: dict[str, object]) -> LogoLight:
         """Create a LogoLight from API response data.
 
         Args:
@@ -402,7 +407,7 @@ class CleanCycle:
     vanishing_act: bool
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> CleanCycle:
+    def from_dict(data: dict[str, object]) -> CleanCycle:
         """Create a CleanCycle from API response data.
 
         Args:
@@ -428,7 +433,7 @@ class SpaLock:
     is_locked: bool
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> SpaLock:
+    def from_dict(data: dict[str, object]) -> SpaLock:
         """Create a SpaLock from API response data.
 
         Args:
@@ -461,7 +466,7 @@ class WaterCare:  # pylint: disable=too-many-instance-attributes
     salt_value: int
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> WaterCare:
+    def from_dict(data: dict[str, object]) -> WaterCare:
         """Create a WaterCare from API response data.
 
         Args:
@@ -501,7 +506,7 @@ class FreshWaterIQ:
     installed: bool
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> FreshWaterIQ:
+    def from_dict(data: dict[str, object]) -> FreshWaterIQ:
         """Create a FreshWaterIQ from API response data.
 
         Handles two response formats:
@@ -553,7 +558,7 @@ class EnergySaving:
     duration: int
 
     @staticmethod
-    def from_dict(schedule_id: int, data: dict[str, Any]) -> EnergySaving:
+    def from_dict(schedule_id: int, data: dict[str, object]) -> EnergySaving:
         """Create an EnergySaving from API response data.
 
         Args:
@@ -576,7 +581,7 @@ class EnergySaving:
         )
 
     @staticmethod
-    def list_from_dict(data: dict[str, Any]) -> list[EnergySaving]:
+    def list_from_dict(data: dict[str, object]) -> list[EnergySaving]:
         """Parse all energy saving schedules from the /status response.
 
         Args:
@@ -615,7 +620,7 @@ class Versions:  # pylint: disable=too-many-instance-attributes
     logolight: str
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> Versions:
+    def from_dict(data: dict[str, object]) -> Versions:
         """Create a Versions from API response data.
 
         Args:
@@ -649,7 +654,7 @@ class ConnectionStatus:
     spa_connected: bool
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> ConnectionStatus:
+    def from_dict(data: dict[str, object]) -> ConnectionStatus:
         """Create a ConnectionStatus from API response data.
 
         The real API returns ``{"spaConnectStatus": "true"}`` as a single
@@ -694,7 +699,7 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
     jet3_power: str
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> Diagnostics:
+    def from_dict(data: dict[str, object]) -> Diagnostics:
         """Create a Diagnostics from API response data.
 
         Args:
