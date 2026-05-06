@@ -30,7 +30,7 @@ class HeatingMode(Enum):
         Returns:
         -------
             The matching HeatingMode, or HeatingMode.UNKNOWN for
-            unrecognised values.
+            unrecognized values.
 
         """
         if value is None:
@@ -64,7 +64,7 @@ class JetSpeed(Enum):
         Returns:
         -------
             The matching JetSpeed, or JetSpeed.UNKNOWN for
-            unrecognised values.
+            unrecognized values.
 
         """
         if value is None:
@@ -105,7 +105,7 @@ class LightColor(Enum):
         Returns:
         -------
             The matching LightColor, or LightColor.UNKNOWN for
-            unrecognised values.
+            unrecognized values.
 
         """
         if value is None:
@@ -136,7 +136,7 @@ class LightWheelMode(Enum):
         Returns:
         -------
             The matching LightWheelMode, or LightWheelMode.UNKNOWN for
-            unrecognised values.
+            unrecognized values.
 
         """
         if value is None:
@@ -169,7 +169,7 @@ class BrightnessLevel(Enum):
         Returns:
         -------
             The matching BrightnessLevel, or BrightnessLevel.UNKNOWN for
-            unrecognised values.
+            unrecognized values.
 
         """
         if value is None:
@@ -198,7 +198,7 @@ class TemperatureUnit(Enum):
         Returns:
         -------
             The matching TemperatureUnit, or TemperatureUnit.UNKNOWN for
-            unrecognised values.
+            unrecognized values.
 
         """
         if value is None:
@@ -226,7 +226,7 @@ class SpaFailureState(Enum):
         Returns:
         -------
             The matching SpaFailureState, or SpaFailureState.UNKNOWN for
-            unrecognised values.
+            unrecognized values.
 
         """
         if value is None:
