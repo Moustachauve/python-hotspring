@@ -792,6 +792,9 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
             heater_error=debug.get("heaterError", "0"),
             power_frequency=debug.get("powerFrequency", "0"),
             pressure_switch_status=debug.get("pressureSwitchStatus", "0"),
+            # TODO: The /32 scaling for volts is likely incorrect for all models or
+            # specific configurations, as real-world readings (e.g., 56V on L2)
+            # do not match expectations. This needs further investigation.
             l1_n_volts=int(debug.get("L1_N_Volts", 0)) / 32.0,
             l2_n_volts=int(debug.get("L2_N_Volts", 0)) / 32.0,
             heater_volts=int(debug.get("Heater_Volts", 0)) / 32.0,
