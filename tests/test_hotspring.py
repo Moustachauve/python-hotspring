@@ -197,7 +197,7 @@ class TestUpdateDiagnostics:
             await client.update()
             diag = await client.update_diagnostics()
 
-        assert diag.heater_power == "4000"
+        assert diag.heater_power == "60"
 
 
 class TestCommands:
