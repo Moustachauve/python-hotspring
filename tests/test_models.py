@@ -27,6 +27,7 @@ from hotspring.models import (
     Spa,
     SpaInfo,
     SpaLock,
+    SpaTestData,
     Versions,
     WaterCare,
     _parse_temperature,
@@ -123,8 +124,8 @@ class TestHeater:
         assert heater.heater_lock is False
         assert heater.heatpump_installed is False
         assert heater.heating_mode == HeatingMode.HEAT_WITH_BOOST
-        assert heater.heater_current == 25857
-        assert heater.heater_hours == 2297600
+        assert heater.heater_current == 7.5
+        assert heater.heater_on_seconds == 52046
         assert heater.set_temperature == 100.0
         assert heater.current_temperature == 100.0
         assert heater.temperature_unit == TemperatureUnit.FAHRENHEIT
@@ -170,7 +171,7 @@ class TestJet:
         # JET1 should be enabled and running
         assert jets[0].jet_id == 1
         assert jets[0].speed == JetSpeed.HIGH_SPEED
-        assert jets[0].on_seconds == 9678336
+        assert jets[0].on_seconds == 1061668
 
         # JET2 should be enabled (no JET2 key = default enable) and off
         assert jets[1].jet_id == 2
@@ -382,15 +383,34 @@ class TestDiagnostics:
         diag = Diagnostics.from_dict(debug_data_response)
         assert diag.spa_failure_state == SpaFailureState.OK
         assert diag.heater_error == "0"
-        assert diag.power_frequency == "60"
-        assert diag.heater_power == "4000"
-        assert diag.l1_n_volts == "120"
+        assert diag.power_frequency == "0"
+        assert diag.heater_power == "60"
+        assert diag.l1_n_volts == 0.0
 
     def test_from_empty_dict(self) -> None:
         """Test parsing diagnostics from empty dict uses defaults."""
         diag = Diagnostics.from_dict({})
         assert diag.spa_failure_state == SpaFailureState.UNKNOWN
         assert diag.heater_power == "0"
+
+
+class TestSpaTestData:
+    """Tests for SpaTestData model parsing."""
+
+    def test_from_dict(self, status_response: dict[str, object]) -> None:
+        """Test parsing test data metrics."""
+        test_metrics = SpaTestData.from_dict(status_response["test_data"])  # type: ignore[arg-type]
+        assert test_metrics.heater_test_status == "off"
+        assert test_metrics.temp_offset == 0.0
+        assert test_metrics.vsense_cal == 0.0
+        assert test_metrics.small_loads_current == 0.0
+        assert test_metrics.heater_current == 7.5
+        assert test_metrics.jet3_current == 0.0
+
+    def test_from_empty_dict(self) -> None:
+        """Test parsing test data from empty dict uses defaults."""
+        test_metrics = SpaTestData.from_dict({})
+        assert test_metrics.small_loads_current == 0.0
 
 
 class TestSpaInfo:

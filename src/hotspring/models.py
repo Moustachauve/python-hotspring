@@ -42,6 +42,7 @@ class Spa:
     versions: Versions
     connection_status: ConnectionStatus
     diagnostics: Diagnostics
+    test_metrics: SpaTestData
 
     def __init__(self, data: dict[str, object]) -> None:
         """Initialize a Spa from the full API response.
@@ -74,6 +75,7 @@ class Spa:
         self.spa_lock = SpaLock.from_dict(data.get("spaLock", {}))
         self.water_care = WaterCare.from_dict(data.get("waterCare", {}))
         self.freshwater_iq = FreshWaterIQ.from_dict(data.get("FWIQ_Parameters", {}))
+        self.test_metrics = SpaTestData.from_dict(data.get("test_data", {}))
         self.energy_savings = EnergySaving.list_from_dict(data.get("energySavings", {}))
         self.versions = Versions.from_dict(
             data.get("productVersions", {}).get("status", {})
@@ -85,6 +87,8 @@ class Spa:
             self.connection_status = ConnectionStatus.from_dict({})
         if not hasattr(self, "diagnostics"):
             self.diagnostics = Diagnostics.from_dict({})
+        if not hasattr(self, "test_metrics"):
+            self.test_metrics = SpaTestData.from_dict({})
 
         return self
 
@@ -172,8 +176,8 @@ class Heater:  # pylint: disable=too-many-instance-attributes
     heater_lock: bool
     heatpump_installed: bool
     heating_mode: HeatingMode
-    heater_current: int
-    heater_hours: int
+    heater_current: float
+    heater_on_seconds: int
     set_temperature: float | None
     current_temperature: float | None
     temperature_unit: TemperatureUnit
@@ -198,8 +202,8 @@ class Heater:  # pylint: disable=too-many-instance-attributes
             heatpump_installed=status.get("heatpumpInstalled", "notinstalled")
             != "notinstalled",
             heating_mode=HeatingMode.build(status.get("heatingMode")),
-            heater_current=int(status.get("heaterCurrent", 0)),
-            heater_hours=int(status.get("heaterHours", 0)),
+            heater_current=int(status.get("heaterCurrent", 0)) / 2560.0,
+            heater_on_seconds=int(status.get("heaterHours", 0)) // 256,
             set_temperature=_parse_temperature(status.get("setWaterTemperature")),
             current_temperature=_parse_temperature(
                 status.get("currentWaterTemperature")
@@ -240,7 +244,7 @@ class Jet:
 
         # Find the on_seconds key dynamically (e.g., jet_1_ON_sec)
         on_sec_key = f"jet_{jet_id}_ON_sec"
-        on_seconds = int(status.get(on_sec_key, 0))
+        on_seconds = int(status.get(on_sec_key, 0)) // 256
 
         return Jet(
             jet_id=jet_id,
@@ -677,6 +681,43 @@ class ConnectionStatus:
 
 
 @dataclass
+class SpaTestData:
+    """Test data metrics from the spa, including raw current readings."""
+
+    heater_test_status: str
+    temp_offset: float
+    vsense_cal: float
+    jet1_jet2_blower_current: float
+    small_loads_current: float
+    heater_current: float
+    jet3_current: float
+
+    @staticmethod
+    def from_dict(data: dict[str, object]) -> SpaTestData:
+        """Create a SpaTestData from API response data.
+
+        Args:
+        ----
+            data: The ``test_data`` dict from the /status response.
+
+        Returns:
+        -------
+            A SpaTestData instance.
+
+        """
+        status = data.get("status", {})
+        return SpaTestData(
+            heater_test_status=str(status.get("heaterTestStatus", "off")),
+            temp_offset=float(status.get("tempOffset", 0.0)),
+            vsense_cal=float(status.get("VsenseCal", 0.0)),
+            jet1_jet2_blower_current=int(status.get("jet1+jet2+blowerCurrent", 0)) / 2560.0,
+            small_loads_current=int(status.get("smallLoadsCurrent", 0)) / 2560.0,
+            heater_current=int(status.get("heaterCurrent", 0)) / 2560.0,
+            jet3_current=int(status.get("jet3Current", 0)) / 2560.0,
+        )
+
+
+@dataclass
 class Diagnostics:  # pylint: disable=too-many-instance-attributes
     """Diagnostic and power metrics from the spa.
 
@@ -689,10 +730,10 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
     heater_error: str
     power_frequency: str
     pressure_switch_status: str
-    l1_n_volts: str
-    l2_n_volts: str
-    heater_volts: str
-    jet3_volts: str
+    l1_n_volts: float
+    l2_n_volts: float
+    heater_volts: float
+    jet3_volts: float
     jet1_jet2_blower_power: str
     small_loads_power: str
     heater_power: str
@@ -718,10 +759,10 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
             heater_error=debug.get("heaterError", "0"),
             power_frequency=debug.get("powerFrequency", "0"),
             pressure_switch_status=debug.get("pressureSwitchStatus", "0"),
-            l1_n_volts=debug.get("L1_N_Volts", "0"),
-            l2_n_volts=debug.get("L2_N_Volts", "0"),
-            heater_volts=debug.get("Heater_Volts", "0"),
-            jet3_volts=debug.get("jet3_Volts", "0"),
+            l1_n_volts=int(debug.get("L1_N_Volts", 0)) / 32.0,
+            l2_n_volts=int(debug.get("L2_N_Volts", 0)) / 32.0,
+            heater_volts=int(debug.get("Heater_Volts", 0)) / 32.0,
+            jet3_volts=int(debug.get("jet3_Volts", 0)) / 32.0,
             jet1_jet2_blower_power=debug.get("jet1_jet2_blowerPower", "0"),
             small_loads_power=debug.get("smallLoadsPower", "0"),
             heater_power=debug.get("heaterPower", "0"),

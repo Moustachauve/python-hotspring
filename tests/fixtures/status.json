@@ -6,7 +6,7 @@
       },
       "status": {
         "speed": "highSpeed",
-        "jet_1_ON_sec": 9678336
+        "jet_1_ON_sec": 271787008
       }
     },
     "JET2": {
@@ -43,8 +43,8 @@
       "heaterLock": "off",
       "heatpumpInstalled": "notinstalled",
       "heatingMode": "heatWithBoost",
-      "heaterCurrent": 25857,
-      "heaterHours": 2297600,
+      "heaterCurrent": 19200,
+      "heaterHours": 13323776,
       "setWaterTemperature": "100F",
       "currentWaterTemperature": "100F",
       "temperatureUnit": "DegF"
@@ -175,6 +175,17 @@
       "CoolZoneFirmwareVersion": "",
       "DosingFirmwareVersion": "",
       "LogolightFirmwareVersion": ""
+    }
+  },
+  "test_data": {
+    "status": {
+      "heaterTestStatus": "off",
+      "tempOffset": 0.0,
+      "VsenseCal": 0.0,
+      "jet1+jet2+blowerCurrent": 0,
+      "smallLoadsCurrent": 0,
+      "heaterCurrent": 19200,
+      "jet3Current": 0
     }
   }
 }
