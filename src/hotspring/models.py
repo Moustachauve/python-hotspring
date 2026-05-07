@@ -107,14 +107,24 @@ class Spa:
         # Update existing info fields if present in data
         if "HOSTNAME" in data:
             self.info.hostname = str(data["HOSTNAME"])
-        if "MAC" in data:
-            self.info.mac_address = str(data["MAC"])
-        if "model" in data:
-            self.info.model = str(data["model"])
-        if "SSID" in data:
-            self.info.ssid = str(data["SSID"])
+        if "rootTopic" in data:
+            self.info.root_topic = str(data["rootTopic"])
         if "SNAready" in data:
             self.info.sna_ready = data["SNAready"] in ("Ready", "Yes")
+
+        if "SPAModelData" in data:
+            model_data = data["SPAModelData"]
+            if isinstance(model_data, dict):
+                status = model_data.get("status", {})
+                if isinstance(status, dict):
+                    if "brandName" in status:
+                        self.info.brand_name = str(status["brandName"])
+                    if "collectionType" in status:
+                        self.info.collection_type = str(status["collectionType"])
+                    if "modelType" in status:
+                        self.info.model_type = str(status["modelType"])
+                    if "volume" in status:
+                        self.info.volume = int(status["volume"])
 
     def update_connection_status(self, data: dict[str, object]) -> None:
         """Update connection status from /spaConnectStatus response.
@@ -155,10 +165,12 @@ class SpaInfo:
     """
 
     hostname: str
-    mac_address: str
-    model: str
-    ssid: str
+    root_topic: str
     sna_ready: bool
+    brand_name: str
+    collection_type: str
+    model_type: str
+    volume: int
 
     @staticmethod
     def from_dict(data: dict[str, object]) -> SpaInfo:
@@ -173,12 +185,21 @@ class SpaInfo:
             A SpaInfo instance.
 
         """
+        model_status: dict[str, object] = {}
+        model_data = data.get("SPAModelData")
+        if isinstance(model_data, dict):
+            status = model_data.get("status")
+            if isinstance(status, dict):
+                model_status = status
+
         return SpaInfo(
-            hostname=data.get("HOSTNAME", ""),
-            mac_address=data.get("MAC", ""),
-            model=data.get("model", ""),
-            ssid=data.get("SSID", ""),
+            hostname=str(data.get("HOSTNAME", "")),
+            root_topic=str(data.get("rootTopic", "")),
             sna_ready=data.get("SNAready", "") in ("Ready", "Yes"),
+            brand_name=str(model_status.get("brandName", "")),
+            collection_type=str(model_status.get("collectionType", "")),
+            model_type=str(model_status.get("modelType", "")),
+            volume=int(model_status.get("volume", 0)),
         )
 
 
@@ -480,7 +501,6 @@ class WaterCare:  # pylint: disable=too-many-instance-attributes
     system_enabled: bool
     ace_mode: str
     boost_active: bool
-    salt_level: str
     salt_value: int
 
     @staticmethod
@@ -504,9 +524,8 @@ class WaterCare:  # pylint: disable=too-many-instance-attributes
             one_twenty_day_timer=int(status.get("120DayTimer", 0)),
             level=int(status.get("level", 0)),
             system_enabled=status.get("SystemEnable", "disable") == "enable",
-            ace_mode=status.get("AceMode", "inactive"),
+            ace_mode=str(status.get("AceMode", "inactive")),
             boost_active=status.get("boost", "inactive") != "inactive",
-            salt_level=status.get("saltLevel", ""),
             salt_value=int(status.get("saltValue", 0)),
         )
 
