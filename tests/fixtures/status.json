@@ -136,7 +136,6 @@
       "SystemEnable": "enable",
       "AceMode": "normal",
       "boost": "inactive",
-      "saltLevel": "LOW_SALT",
       "saltValue": 0
     }
   },

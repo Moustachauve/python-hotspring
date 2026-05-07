@@ -294,7 +294,6 @@ class TestWaterCare:
         assert water.system_enabled is True
         assert water.ace_mode == "normal"
         assert water.boost_active is False
-        assert water.salt_level == "LOW_SALT"
         assert water.salt_value == 0
 
 
@@ -417,15 +416,35 @@ class TestSpaInfo:
     """Tests for SpaInfo model parsing."""
 
     def test_from_dict(self, startup_response: dict[str, object]) -> None:
-        """Test parsing spa info from startup response."""
+        """Test parsing spa identity info."""
+        # Mix in spamodel data for test
+        startup_response["SPAModelData"] = {
+            "status": {
+                "brandName": "0",
+                "collectionType": "1",
+                "modelType": "4",
+                "volume": "335"
+            }
+        }
         info = SpaInfo.from_dict(startup_response)
         assert info.hostname == "ConnectedSpa_C59C9C"
+        assert info.root_topic == "mySpaF8B3B7C59C9C"
         assert info.sna_ready is True
+        assert info.brand_name == "0"
+        assert info.collection_type == "1"
+        assert info.model_type == "4"
+        assert info.volume == 335
 
-    def test_sna_not_ready(self) -> None:
-        """Test SNA not ready state."""
-        info = SpaInfo.from_dict({"SNAready": "NotReady"})
+    def test_from_empty_dict(self) -> None:
+        """Test parsing info from empty dict uses defaults."""
+        info = SpaInfo.from_dict({})
+        assert info.hostname == ""
+        assert info.root_topic == ""
         assert info.sna_ready is False
+        assert info.brand_name == ""
+        assert info.collection_type == ""
+        assert info.model_type == ""
+        assert info.volume == 0
 
     def test_sna_unknown_state(self) -> None:
         """Test SNA unknown state (real HNA reports this)."""
@@ -457,6 +476,43 @@ class TestSpa:
         assert spa.spa_lock.is_locked is False
         assert spa.blower.is_enabled is False
         assert spa.logo_light.brightness == BrightnessLevel.LEVEL_2
+
+    def test_update_info(self, status_response: dict[str, object]) -> None:
+        """Test updating spa info with startup and spamodel data."""
+        spa = Spa(status_response)
+        spa.update_info({"HOSTNAME": "new_host", "rootTopic": "new_topic", "SNAready": "Yes"})
+        assert spa.info.hostname == "new_host"
+        assert spa.info.root_topic == "new_topic"
+        assert spa.info.sna_ready is True
+        
+        spa.update_info({
+            "SPAModelData": {
+                "status": {
+                    "brandName": "A",
+                    "collectionType": "B",
+                    "modelType": "C",
+                    "volume": "100"
+                }
+            }
+        })
+        assert spa.info.hostname == "new_host"
+        assert spa.info.brand_name == "A"
+        assert spa.info.collection_type == "B"
+        assert spa.info.model_type == "C"
+        assert spa.info.volume == 100
+
+    def test_update_info_empty(self, status_response: dict[str, object]) -> None:
+        """Test update_info with empty dicts."""
+        spa = Spa(status_response)
+        spa.update_info({})
+        assert spa.info.hostname == ""
+        assert spa.info.volume == 0
+        
+        spa.update_info({"SPAModelData": {}})
+        assert spa.info.hostname == ""
+        
+        spa.update_info({"SPAModelData": {"status": "string"}})
+        assert spa.info.hostname == ""
 
     def test_update_from_dict(self, status_response: dict[str, object]) -> None:
         """Test updating an existing Spa from new data."""
