@@ -81,6 +81,7 @@ async def main() -> None:
         print("  WATER CARE")
         print("=" * 20)
         print(f"System Enabled: {s.water_care.system_enabled}")
+        print(f"Output Level:   {s.water_care.level} / 10")
         print(f"Salt Value:     {s.water_care.salt_value}")
         print(f"Salt Level:     {s.water_care.salt_level}")
         print(f"Cartridge:      {s.water_care.cartridge_installed}")
