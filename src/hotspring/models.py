@@ -100,7 +100,21 @@ class Spa:
             data: Combined data from /startup and /spamodel endpoints.
 
         """
-        self.info = SpaInfo.from_dict(data)
+        if not hasattr(self, "info"):
+            self.info = SpaInfo.from_dict(data)
+            return
+
+        # Update existing info fields if present in data
+        if "HOSTNAME" in data:
+            self.info.hostname = str(data["HOSTNAME"])
+        if "MAC" in data:
+            self.info.mac_address = str(data["MAC"])
+        if "model" in data:
+            self.info.model = str(data["model"])
+        if "SSID" in data:
+            self.info.ssid = str(data["SSID"])
+        if "SNAready" in data:
+            self.info.sna_ready = data["SNAready"] in ("Ready", "Yes")
 
     def update_connection_status(self, data: dict[str, object]) -> None:
         """Update connection status from /spaConnectStatus response.

@@ -169,11 +169,21 @@ class HotSpring:
             self.spa.update_from_dict(status_data)
 
         # Fetch identity/startup info
+        identity_data: dict[str, object] = {}
         try:
             startup_data = await self.request("/startup")
-            self.spa.update_info(startup_data)
+            identity_data.update(startup_data)
         except HotSpringError:
-            pass  # Non-critical; identity may already be populated
+            pass
+
+        try:
+            model_data = await self.request("/spamodel")
+            identity_data.update(model_data)
+        except HotSpringError:
+            pass
+
+        if identity_data:
+            self.spa.update_info(identity_data)
 
         # Fetch connection status
         try:
