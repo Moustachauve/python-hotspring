@@ -423,7 +423,7 @@ class TestSpaInfo:
                 "brandName": "0",
                 "collectionType": "1",
                 "modelType": "4",
-                "volume": "335"
+                "volume": "335",
             }
         }
         info = SpaInfo.from_dict(startup_response)
@@ -487,16 +487,18 @@ class TestSpa:
         assert spa.info.root_topic == "new_topic"
         assert spa.info.sna_ready is True
 
-        spa.update_info({
-            "SPAModelData": {
-                "status": {
-                    "brandName": "A",
-                    "collectionType": "B",
-                    "modelType": "C",
-                    "volume": "100"
+        spa.update_info(
+            {
+                "SPAModelData": {
+                    "status": {
+                        "brandName": "A",
+                        "collectionType": "B",
+                        "modelType": "C",
+                        "volume": "100",
+                    }
                 }
             }
-        })
+        )
         assert spa.info.hostname == "new_host"
         assert spa.info.brand_name == "A"
         assert spa.info.collection_type == "B"
@@ -509,7 +511,6 @@ class TestSpa:
         spa.update_info({})
         assert spa.info.hostname == ""
         assert spa.info.volume == 0
-
 
         spa.update_info({"SPAModelData": {}})
         assert spa.info.hostname == ""

@@ -38,6 +38,13 @@ It is primarily designed to be used as the communication layer for an official
 - **Energy saving schedules** — View configured energy saving time windows
 - **Clean cycle** — Start or stop the 10-minute clean cycle
 
+> [!CAUTION]
+> The spa's energy consumption and usage metrics are not always accurate. Most
+> values related to power (including current, amp, volt, etc) and values based
+> on time (like the amount of time the jet have been turned on) are most likely
+> incorrect, as I have not been able to fully reverse engineer these aspects of
+> the API.
+
 ### Compatible Spas
 
 This library works with any Hot Spring, Caldera, or Freeflow spa that supports
