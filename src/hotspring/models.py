@@ -124,7 +124,7 @@ class Spa:
                     if "modelType" in status:
                         self.info.model_type = str(status["modelType"])
                     if "volume" in status:
-                        self.info.volume = int(status["volume"])
+                        self.info.volume = int(status["volume"] or 0)
 
     def update_connection_status(self, data: dict[str, object]) -> None:
         """Update connection status from /spaConnectStatus response.
@@ -199,7 +199,7 @@ class SpaInfo:
             brand_name=str(model_status.get("brandName", "")),
             collection_type=str(model_status.get("collectionType", "")),
             model_type=str(model_status.get("modelType", "")),
-            volume=int(model_status.get("volume", 0)),
+            volume=int(model_status.get("volume") or 0),
         )
 
 
@@ -743,7 +743,9 @@ class SpaTestData:
             heater_test_status=str(status.get("heaterTestStatus", "off")),
             temp_offset=float(status.get("tempOffset", 0.0)),
             vsense_cal=float(status.get("VsenseCal", 0.0)),
-            jet1_jet2_blower_current=int(status.get("jet1+jet2+blowerCurrent", 0)) / 2560.0,
+            jet1_jet2_blower_current=(
+                int(status.get("jet1+jet2+blowerCurrent", 0)) / 2560.0
+            ),
             small_loads_current=int(status.get("smallLoadsCurrent", 0)) / 2560.0,
             heater_current=int(status.get("heaterCurrent", 0)) / 2560.0,
             jet3_current=int(status.get("jet3Current", 0)) / 2560.0,
@@ -792,13 +794,13 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
             heater_error=debug.get("heaterError", "0"),
             power_frequency=debug.get("powerFrequency", "0"),
             pressure_switch_status=debug.get("pressureSwitchStatus", "0"),
-            # TODO: The /32 scaling for volts is likely incorrect for all models or
+            # NOTE: The /32 scaling for volts is likely incorrect for all models or
             # specific configurations, as real-world readings (e.g., 56V on L2)
             # do not match expectations. This needs further investigation.
-            l1_n_volts=int(debug.get("L1_N_Volts", 0)) / 32.0,
-            l2_n_volts=int(debug.get("L2_N_Volts", 0)) / 32.0,
-            heater_volts=int(debug.get("Heater_Volts", 0)) / 32.0,
-            jet3_volts=int(debug.get("jet3_Volts", 0)) / 32.0,
+            l1_n_volts=int(debug.get("L1_N_Volts") or 0) / 32.0,
+            l2_n_volts=int(debug.get("L2_N_Volts") or 0) / 32.0,
+            heater_volts=int(debug.get("Heater_Volts") or 0) / 32.0,
+            jet3_volts=int(debug.get("jet3_Volts") or 0) / 32.0,
             jet1_jet2_blower_power=debug.get("jet1_jet2_blowerPower", "0"),
             small_loads_power=debug.get("smallLoadsPower", "0"),
             heater_power=debug.get("heaterPower", "0"),

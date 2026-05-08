@@ -480,11 +480,13 @@ class TestSpa:
     def test_update_info(self, status_response: dict[str, object]) -> None:
         """Test updating spa info with startup and spamodel data."""
         spa = Spa(status_response)
-        spa.update_info({"HOSTNAME": "new_host", "rootTopic": "new_topic", "SNAready": "Yes"})
+        spa.update_info(
+            {"HOSTNAME": "new_host", "rootTopic": "new_topic", "SNAready": "Yes"}
+        )
         assert spa.info.hostname == "new_host"
         assert spa.info.root_topic == "new_topic"
         assert spa.info.sna_ready is True
-        
+
         spa.update_info({
             "SPAModelData": {
                 "status": {
@@ -507,10 +509,11 @@ class TestSpa:
         spa.update_info({})
         assert spa.info.hostname == ""
         assert spa.info.volume == 0
-        
+
+
         spa.update_info({"SPAModelData": {}})
         assert spa.info.hostname == ""
-        
+
         spa.update_info({"SPAModelData": {"status": "string"}})
         assert spa.info.hostname == ""
 
@@ -526,8 +529,8 @@ class TestSpa:
         assert spa.heater.is_on is False
         assert spa.heater.set_temperature == 98.0
 
-    def test_update_info(self, startup_response: dict[str, object]) -> None:
-        """Test updating spa info."""
+    def test_update_info_startup(self, startup_response: dict[str, object]) -> None:
+        """Test updating spa info from startup response."""
         spa = Spa({})
         spa.update_info(startup_response)
         assert spa.info.hostname == "ConnectedSpa_C59C9C"
