@@ -76,7 +76,7 @@ class TestUpdate:
         assert spa is not None
         assert spa.heater.is_on is True
         assert spa.heater.current_temperature == 100.0
-        assert spa.info.hostname == "ConnectedSpa_C59C9C"
+        assert spa.info.hostname == "ConnectedSpa_112233"
         assert spa.connection_status.spa_connected is True
         assert client.spa is spa
 

@@ -24,6 +24,7 @@ def print_identity(s: Spa) -> None:
     print("  SPA IDENTITY")
     print("=" * 20)
     print(f"Hostname:       {s.info.hostname}")
+    print(f"MAC Address:    {s.info.mac_address}")
     print(f"Root Topic:     {s.info.root_topic}")
     print(f"Brand Name:     {s.info.brand_name}")
     print(f"Collection:     {s.info.collection_type}")
