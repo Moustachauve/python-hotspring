@@ -202,6 +202,32 @@ class SpaInfo:
             volume=int(model_status.get("volume") or 0),
         )
 
+    @property
+    def mac_address(self) -> str:
+        """Derive the MAC address from root_topic.
+
+        The HNA firmware builds root_topic as ``mySpa%02X%02X%02X%02X%02X%02X``
+        using the device's 6-byte WiFi MAC, so the 12 hex characters after the
+        ``mySpa`` prefix are the full MAC address.
+
+        Returns
+        -------
+            Colon-separated uppercase MAC (e.g. ``"AA:BB:CC:11:22:33"``),
+            or ``""`` if root_topic does not match the expected format.
+
+        """
+        prefix = "mySpa"
+        if not self.root_topic.startswith(prefix):
+            return ""
+        mac_hex = self.root_topic[len(prefix) :]
+        try:
+            mac_bytes = bytes.fromhex(mac_hex)
+        except ValueError:
+            return ""
+        if len(mac_bytes) != 6:
+            return ""
+        return ":".join(f"{b:02X}" for b in mac_bytes)
+
 
 @dataclass
 class Heater:  # pylint: disable=too-many-instance-attributes

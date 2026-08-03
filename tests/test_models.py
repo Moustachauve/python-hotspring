@@ -427,8 +427,9 @@ class TestSpaInfo:
             }
         }
         info = SpaInfo.from_dict(startup_response)
-        assert info.hostname == "ConnectedSpa_C59C9C"
-        assert info.root_topic == "mySpaF8B3B7C59C9C"
+        assert info.hostname == "ConnectedSpa_112233"
+        assert info.root_topic == "mySpaAABBCC112233"
+        assert info.mac_address == "AA:BB:CC:11:22:33"
         assert info.sna_ready is True
         assert info.brand_name == "0"
         assert info.collection_type == "1"
@@ -440,11 +441,68 @@ class TestSpaInfo:
         info = SpaInfo.from_dict({})
         assert info.hostname == ""
         assert info.root_topic == ""
+        assert info.mac_address == ""
         assert info.sna_ready is False
         assert info.brand_name == ""
         assert info.collection_type == ""
         assert info.model_type == ""
         assert info.volume == 0
+
+    def test_mac_address_formatting(self) -> None:
+        """Test MAC address extraction from invalid or valid root topics."""
+        info = SpaInfo.from_dict({"rootTopic": "mySpa112233445566"})
+        assert info.mac_address == "11:22:33:44:55:66"
+
+        invalid_info = SpaInfo.from_dict({"rootTopic": "invalid_topic"})
+        assert invalid_info.mac_address == ""
+
+    @pytest.mark.parametrize(
+        ("root_topic", "expected_mac"),
+        [
+            # Real device format example (firmware %02X produces uppercase)
+            ("mySpaAABBCC112233", "AA:BB:CC:11:22:33"),
+            # All zeros
+            ("mySpa000000000000", "00:00:00:00:00:00"),
+            # All F's
+            ("mySpaFFFFFFFFFFFF", "FF:FF:FF:FF:FF:FF"),
+            # Lowercase hex (defensive: not produced by firmware but valid hex)
+            ("mySpaabcdef123456", "AB:CD:EF:12:34:56"),
+            # Mixed case
+            ("mySpaAaBbCcDdEeFf", "AA:BB:CC:DD:EE:FF"),
+            # Wrong prefix
+            ("otherAABBCC112233", ""),
+            # Right prefix, too short (only 10 hex chars)
+            ("mySpaAABBCC1122", ""),
+            # Right prefix, too long (14 hex chars)
+            ("mySpaAABBCC11223344", ""),
+            # Right prefix + length but contains non-hex char 'G'
+            ("mySpaAABBCC1122GG", ""),
+            # Empty root_topic
+            ("", ""),
+            # Just the prefix, no hex
+            ("mySpa", ""),
+            # Prefix with spaces instead of hex
+            ("mySpa  BBCC112233", ""),
+        ],
+        ids=[
+            "real_device",
+            "all_zeros",
+            "all_ff",
+            "lowercase",
+            "mixed_case",
+            "wrong_prefix",
+            "too_short",
+            "too_long",
+            "non_hex",
+            "empty",
+            "prefix_only",
+            "spaces",
+        ],
+    )
+    def test_mac_address_edge_cases(self, root_topic: str, expected_mac: str) -> None:
+        """Test MAC address extraction across all edge cases."""
+        info = SpaInfo.from_dict({"rootTopic": root_topic})
+        assert info.mac_address == expected_mac
 
     def test_sna_unknown_state(self) -> None:
         """Test SNA unknown state (real HNA reports this)."""
@@ -534,7 +592,7 @@ class TestSpa:
         """Test updating spa info from startup response."""
         spa = Spa({})
         spa.update_info(startup_response)
-        assert spa.info.hostname == "ConnectedSpa_C59C9C"
+        assert spa.info.hostname == "ConnectedSpa_112233"
         assert spa.info.sna_ready is True
 
     def test_update_connection_status(
