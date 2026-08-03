@@ -1,18 +1,30 @@
 ---
 name: Sync Labels
 
+# yamllint disable-line rule:truthy
 on:
   push:
     branches:
       - main
     paths:
       - ".github/labels.yml"
+      - ".github/workflows/labels.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   labels:
     name: Sync labels
     runs-on: ubuntu-latest
     steps:
+      - name: ⤵️ Check out code from GitHub
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: 🚀 Run Labeler
         uses: crazy-max/ghaction-github-labeler@v5
         with:
