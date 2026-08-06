@@ -462,78 +462,59 @@ class TestSpaInfo:
         assert info.volume == 0
 
     @pytest.mark.parametrize(
-        (
-            "brand_id",
-            "collection_id",
-            "model_id",
-            "expected_brand",
-            "expected_brand_name",
-            "expected_collection",
-            "expected_model",
-        ),
+        ("inputs", "expected"),
         [
             (
-                "0",
-                "0",
-                "7",
-                SpaBrand.HOTSPRING,
-                "HotSpring",
-                "HighLife",
-                "HighLife Envoy",
+                ("0", "0", "7"),
+                (SpaBrand.HOTSPRING, "HotSpring", "HighLife", "HighLife Envoy"),
             ),
             (
-                "0",
-                "1",
-                "4",
-                SpaBrand.HOTSPRING,
-                "HotSpring",
-                "Limelight",
-                "Limelight Beam Canada",
+                ("0", "1", "4"),
+                (SpaBrand.HOTSPRING, "HotSpring", "Limelight", "Limelight Beam Canada"),
             ),
             (
-                "0",
-                "2",
-                "4",
-                SpaBrand.HOTSPRING,
-                "HotSpring",
-                "Hot Spot",
-                "Hot Spot Relay",
+                ("0", "2", "4"),
+                (SpaBrand.HOTSPRING, "HotSpring", "Hot Spot", "Hot Spot Relay"),
             ),
             (
-                "1",
-                "1",
-                "5",
-                SpaBrand.CALDERA,
-                "Caldera",
-                "Utopia",
-                "Utopia Geneva International",
+                ("1", "1", "5"),
+                (SpaBrand.CALDERA, "Caldera", "Utopia", "Utopia Geneva International"),
             ),
-            ("1", "3", "1", SpaBrand.CALDERA, "Caldera", "Paradise", "Paradise Kauai"),
-            ("1", "4", "0", SpaBrand.CALDERA, "Caldera", "Vacanza", "Vacanza Aventine"),
-            ("99", "99", "99", SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
             (
-                "invalid",
-                "invalid",
-                "invalid",
-                SpaBrand.UNKNOWN,
-                "Unknown",
-                "Unknown",
-                "Unknown",
+                ("1", "3", "1"),
+                (SpaBrand.CALDERA, "Caldera", "Paradise", "Paradise Kauai"),
             ),
-            (None, None, None, SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
+            (
+                ("1", "4", "0"),
+                (SpaBrand.CALDERA, "Caldera", "Vacanza", "Vacanza Aventine"),
+            ),
+            (
+                ("99", "99", "99"),
+                (SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
+            ),
+            (
+                ("invalid", "invalid", "invalid"),
+                (SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
+            ),
+            (
+                (None, None, None),
+                (SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
+            ),
         ],
     )
-    def test_spa_model_resolution(  # noqa: PLR0913
+    def test_spa_model_resolution(
         self,
-        brand_id: str | None,
-        collection_id: str | None,
-        model_id: str | None,
-        expected_brand: SpaBrand,
-        expected_brand_name: str,
-        expected_collection: str,
-        expected_model: str,
+        inputs: tuple[str | None, str | None, str | None],
+        expected: tuple[SpaBrand, str, str, str],
     ) -> None:
         """Test resolution of various brand, collection, and model ID combinations."""
+        brand_id, collection_id, model_id = inputs
+        (
+            expected_brand,
+            expected_brand_name,
+            expected_collection,
+            expected_model,
+        ) = expected
         status: dict[str, object] = {}
         if brand_id is not None:
             status["brandName"] = brand_id
