@@ -26,9 +26,9 @@ def print_identity(s: Spa) -> None:
     print(f"Hostname:       {s.info.hostname}")
     print(f"MAC Address:    {s.info.mac_address}")
     print(f"Root Topic:     {s.info.root_topic}")
-    print(f"Brand Name:     {s.info.brand_name}")
-    print(f"Collection:     {s.info.collection_type}")
-    print(f"Model Type:     {s.info.model_type}")
+    print(f"Brand:          {s.info.brand_name} (ID: {s.info.brand_id})")
+    print(f"Collection:     {s.info.collection} (ID: {s.info.collection_id})")
+    print(f"Model Name:     {s.info.model_name} (ID: {s.info.model_id})")
     print(f"Volume:         {s.info.volume} gallons")
     print(f"SNA Ready:      {s.info.sna_ready}")
 

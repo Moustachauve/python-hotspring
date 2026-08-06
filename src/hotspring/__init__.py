@@ -6,6 +6,7 @@ from .const import (
     JetSpeed,
     LightColor,
     LightWheelMode,
+    SpaBrand,
     SpaFailureState,
     TemperatureUnit,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "LightZone",
     "LogoLight",
     "Spa",
+    "SpaBrand",
     "SpaFailureState",
     "SpaInfo",
     "SpaLock",
