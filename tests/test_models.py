@@ -497,6 +497,14 @@ class TestSpaInfo:
                 (SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
             ),
             (
+                ("00", "01", "04"),
+                (SpaBrand.HOTSPRING, "HotSpring", "Limelight", "Limelight Beam Canada"),
+            ),
+            (
+                ("+1", "1", "5"),
+                (SpaBrand.CALDERA, "Caldera", "Utopia", "Utopia Geneva International"),
+            ),
+            (
                 (None, None, None),
                 (SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
             ),
