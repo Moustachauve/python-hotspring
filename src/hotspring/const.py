@@ -259,10 +259,14 @@ class SpaBrand(Enum):
         """
         if value is None:
             return cls.UNKNOWN
-        val_str = str(value).strip()
-        if val_str == "0":
+        try:
+            val_int = int(str(value).strip())
+        except ValueError:
+            return cls.UNKNOWN
+
+        if val_int == 0:
             return cls.HOTSPRING
-        if val_str == "1":
+        if val_int == 1:
             return cls.CALDERA
         return cls.UNKNOWN
 
