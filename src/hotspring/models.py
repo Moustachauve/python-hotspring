@@ -16,8 +16,10 @@ from .const import (
     JetSpeed,
     LightColor,
     LightWheelMode,
+    SpaBrand,
     SpaFailureState,
     TemperatureUnit,
+    resolve_spa_model,
 )
 
 
@@ -118,13 +120,20 @@ class Spa:
                 status = model_data.get("status", {})
                 if isinstance(status, dict):
                     if "brandName" in status:
-                        self.info.brand_name = str(status["brandName"])
+                        self.info.brand_id = str(status["brandName"])
                     if "collectionType" in status:
-                        self.info.collection_type = str(status["collectionType"])
+                        self.info.collection_id = str(status["collectionType"])
                     if "modelType" in status:
-                        self.info.model_type = str(status["modelType"])
+                        self.info.model_id = str(status["modelType"])
                     if "volume" in status:
                         self.info.volume = int(status["volume"] or 0)
+                    brand, collection, model_name = resolve_spa_model(
+                        self.info.brand_id, self.info.collection_id, self.info.model_id
+                    )
+                    self.info.brand = brand
+                    self.info.brand_name = brand.value
+                    self.info.collection = collection
+                    self.info.model_name = model_name
 
     def update_connection_status(self, data: dict[str, object]) -> None:
         """Update connection status from /spaConnectStatus response.
@@ -167,10 +176,24 @@ class SpaInfo:
     hostname: str
     root_topic: str
     sna_ready: bool
+    brand: SpaBrand
     brand_name: str
-    collection_type: str
-    model_type: str
+    collection: str
+    model_name: str
+    brand_id: str
+    collection_id: str
+    model_id: str
     volume: int
+
+    @property
+    def collection_type(self) -> str:
+        """Alias for collection_id for backward compatibility."""
+        return self.collection_id
+
+    @property
+    def model_type(self) -> str:
+        """Alias for model_id for backward compatibility."""
+        return self.model_id
 
     @staticmethod
     def from_dict(data: dict[str, object]) -> SpaInfo:
@@ -192,13 +215,24 @@ class SpaInfo:
             if isinstance(status, dict):
                 model_status = status
 
+        brand_id = str(model_status.get("brandName", ""))
+        collection_id = str(model_status.get("collectionType", ""))
+        model_id = str(model_status.get("modelType", ""))
+        brand, collection, model_name = resolve_spa_model(
+            brand_id, collection_id, model_id
+        )
+
         return SpaInfo(
             hostname=str(data.get("HOSTNAME", "")),
             root_topic=str(data.get("rootTopic", "")),
             sna_ready=data.get("SNAready", "") in ("Ready", "Yes"),
-            brand_name=str(model_status.get("brandName", "")),
-            collection_type=str(model_status.get("collectionType", "")),
-            model_type=str(model_status.get("modelType", "")),
+            brand=brand,
+            brand_name=brand.value,
+            collection=collection,
+            model_name=model_name,
+            brand_id=brand_id,
+            collection_id=collection_id,
+            model_id=model_id,
             volume=int(model_status.get("volume") or 0),
         )
 

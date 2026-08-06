@@ -10,6 +10,7 @@ from hotspring import (
     JetSpeed,
     LightColor,
     LightWheelMode,
+    SpaBrand,
     SpaFailureState,
     TemperatureUnit,
 )
@@ -431,7 +432,13 @@ class TestSpaInfo:
         assert info.root_topic == "mySpaAABBCC112233"
         assert info.mac_address == "AA:BB:CC:11:22:33"
         assert info.sna_ready is True
-        assert info.brand_name == "0"
+        assert info.brand == SpaBrand.HOTSPRING
+        assert info.brand_name == "HotSpring"
+        assert info.collection == "Limelight"
+        assert info.model_name == "Limelight Beam Canada"
+        assert info.brand_id == "0"
+        assert info.collection_id == "1"
+        assert info.model_id == "4"
         assert info.collection_type == "1"
         assert info.model_type == "4"
         assert info.volume == 335
@@ -443,10 +450,107 @@ class TestSpaInfo:
         assert info.root_topic == ""
         assert info.mac_address == ""
         assert info.sna_ready is False
-        assert info.brand_name == ""
+        assert info.brand == SpaBrand.UNKNOWN
+        assert info.brand_name == "Unknown"
+        assert info.collection == "Unknown"
+        assert info.model_name == "Unknown"
+        assert info.brand_id == ""
+        assert info.collection_id == ""
+        assert info.model_id == ""
         assert info.collection_type == ""
         assert info.model_type == ""
         assert info.volume == 0
+
+    @pytest.mark.parametrize(
+        (
+            "brand_id",
+            "collection_id",
+            "model_id",
+            "expected_brand",
+            "expected_brand_name",
+            "expected_collection",
+            "expected_model",
+        ),
+        [
+            (
+                "0",
+                "0",
+                "7",
+                SpaBrand.HOTSPRING,
+                "HotSpring",
+                "HighLife",
+                "HighLife Envoy",
+            ),
+            (
+                "0",
+                "1",
+                "4",
+                SpaBrand.HOTSPRING,
+                "HotSpring",
+                "Limelight",
+                "Limelight Beam Canada",
+            ),
+            (
+                "0",
+                "2",
+                "4",
+                SpaBrand.HOTSPRING,
+                "HotSpring",
+                "Hot Spot",
+                "Hot Spot Relay",
+            ),
+            (
+                "1",
+                "1",
+                "5",
+                SpaBrand.CALDERA,
+                "Caldera",
+                "Utopia",
+                "Utopia Geneva International",
+            ),
+            ("1", "3", "1", SpaBrand.CALDERA, "Caldera", "Paradise", "Paradise Kauai"),
+            ("1", "4", "0", SpaBrand.CALDERA, "Caldera", "Vacanza", "Vacanza Aventine"),
+            ("99", "99", "99", SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
+            (
+                "invalid",
+                "invalid",
+                "invalid",
+                SpaBrand.UNKNOWN,
+                "Unknown",
+                "Unknown",
+                "Unknown",
+            ),
+            (None, None, None, SpaBrand.UNKNOWN, "Unknown", "Unknown", "Unknown"),
+        ],
+    )
+    def test_spa_model_resolution(  # noqa: PLR0913
+        self,
+        brand_id: str | None,
+        collection_id: str | None,
+        model_id: str | None,
+        expected_brand: SpaBrand,
+        expected_brand_name: str,
+        expected_collection: str,
+        expected_model: str,
+    ) -> None:
+        """Test resolution of various brand, collection, and model ID combinations."""
+        status: dict[str, object] = {}
+        if brand_id is not None:
+            status["brandName"] = brand_id
+        if collection_id is not None:
+            status["collectionType"] = collection_id
+        if model_id is not None:
+            status["modelType"] = model_id
+        data = {"SPAModelData": {"status": status}}
+        info = SpaInfo.from_dict(data)
+        assert info.brand == expected_brand
+        assert info.brand_name == expected_brand_name
+        assert info.collection == expected_collection
+        assert info.model_name == expected_model
+        assert info.brand_id == (brand_id or "")
+        assert info.collection_id == (collection_id or "")
+        assert info.model_id == (model_id or "")
+        assert SpaBrand.build(None) == SpaBrand.UNKNOWN
 
     def test_mac_address_formatting(self) -> None:
         """Test MAC address extraction from invalid or valid root topics."""
@@ -549,18 +653,22 @@ class TestSpa:
             {
                 "SPAModelData": {
                     "status": {
-                        "brandName": "A",
-                        "collectionType": "B",
-                        "modelType": "C",
+                        "brandName": "0",
+                        "collectionType": "1",
+                        "modelType": "4",
                         "volume": "100",
                     }
                 }
             }
         )
         assert spa.info.hostname == "new_host"
-        assert spa.info.brand_name == "A"
-        assert spa.info.collection_type == "B"
-        assert spa.info.model_type == "C"
+        assert spa.info.brand == SpaBrand.HOTSPRING
+        assert spa.info.brand_name == "HotSpring"
+        assert spa.info.collection == "Limelight"
+        assert spa.info.model_name == "Limelight Beam Canada"
+        assert spa.info.brand_id == "0"
+        assert spa.info.collection_id == "1"
+        assert spa.info.model_id == "4"
         assert spa.info.volume == 100
 
     def test_update_info_empty(self, status_response: dict[str, object]) -> None:
