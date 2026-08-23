@@ -283,6 +283,28 @@ class TestLightZone:
         assert on_zone.intensity == 3
         assert on_zone.color == LightColor.RED
 
+    def test_custom_rgb_from_payload(self) -> None:
+        """Test parsing custom RGB from explicit payload fields."""
+        zone = LightZone.from_dict(
+            1,
+            {
+                "config": {"zone_1": "enable"},
+                "status": {
+                    "color": "custom",
+                    "RGBstate": "active",
+                    "cRed": 0,
+                    "cGreen": 255,
+                    "cBlue": 255,
+                    "Intensity": 5,
+                },
+            },
+        )
+        assert zone.color == LightColor.CUSTOM
+        assert zone.rgb_state == "active"
+        assert zone.c_red == 0
+        assert zone.c_green == 255
+        assert zone.c_blue == 255
+
 
 class TestLogoLight:
     """Tests for LogoLight model parsing."""

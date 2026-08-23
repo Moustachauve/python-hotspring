@@ -411,6 +411,10 @@ class LightZone:
     light_wheel: LightWheelMode
     intensity: int
     loop_speed: int
+    c_red: int = 0
+    c_green: int = 0
+    c_blue: int = 0
+    rgb_state: str = "inactive"
 
     @staticmethod
     def from_dict(zone_id: int, data: dict[str, object]) -> LightZone:
@@ -437,6 +441,14 @@ class LightZone:
         intensity = int(status.get("Intensity", 0))
         is_on = intensity > 0
 
+        c_red = int(status.get("cRed", 0))
+        c_green = int(status.get("cGreen", 0))
+        c_blue = int(status.get("cBlue", 0))
+        rgb_state = str(status.get("RGBstate", "inactive")).lower()
+
+        if rgb_state == "active" and (c_red, c_green, c_blue) != (0, 0, 0):
+            color = LightColor.CUSTOM
+
         return LightZone(
             zone_id=zone_id,
             is_enabled=is_enabled,
@@ -445,6 +457,10 @@ class LightZone:
             light_wheel=light_wheel,
             intensity=intensity,
             loop_speed=int(status.get("loopSpeed", 0)),
+            c_red=c_red,
+            c_green=c_green,
+            c_blue=c_blue,
+            rgb_state=rgb_state,
         )
 
     @staticmethod
