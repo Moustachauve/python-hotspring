@@ -82,8 +82,6 @@ class LightColor(Enum):
     """
 
     UNKNOWN = "unknown"
-    OFF = "WHEEL_OFF"
-    ON = "WHEEL_ON"
     RED = "RED"
     BLUE = "BLUE"
     GREEN = "GREEN"

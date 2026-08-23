@@ -73,14 +73,18 @@ class TestEnums:
     def test_light_color_uppercase(self) -> None:
         """Test parsing uppercase color from real API."""
         assert LightColor.build("BLUE") == LightColor.BLUE
-
-    def test_light_color_wheel_off(self) -> None:
-        """Test parsing WHEEL_OFF light color."""
-        assert LightColor.build("WHEEL_OFF") == LightColor.OFF
+        assert LightColor.build("RED") == LightColor.RED
+        assert LightColor.build("GREEN") == LightColor.GREEN
+        assert LightColor.build("YELLOW") == LightColor.YELLOW
+        assert LightColor.build("WHITE") == LightColor.WHITE
+        assert LightColor.build("AQUA") == LightColor.AQUA
+        assert LightColor.build("MAGENTA") == LightColor.MAGENTA
 
     def test_light_color_unknown(self) -> None:
         """Test parsing an unknown light color."""
         assert LightColor.build("Purple") == LightColor.UNKNOWN
+        assert LightColor.build("WHEEL_OFF") == LightColor.UNKNOWN
+        assert LightColor.build(None) == LightColor.UNKNOWN
 
     def test_light_wheel_known(self) -> None:
         """Test parsing a known light wheel mode."""
@@ -242,6 +246,42 @@ class TestLightZone:
         """Test parsing light zones from empty dict."""
         zones = LightZone.list_from_dict({})
         assert zones == []
+
+    def test_is_on_based_on_intensity(self) -> None:
+        """Test that is_on evaluates based on intensity > 0."""
+        # When Intensity is 0, is_on is False even if a color is present
+        off_zone = LightZone.from_dict(
+            1,
+            {
+                "config": {"zone_1": "enable"},
+                "status": {
+                    "lightWheel": "off",
+                    "loopSpeed": 0,
+                    "Intensity": 0,
+                    "color": "BLUE",
+                },
+            },
+        )
+        assert off_zone.is_on is False
+        assert off_zone.intensity == 0
+        assert off_zone.color == LightColor.BLUE
+
+        # When Intensity is 1..5, is_on is True
+        on_zone = LightZone.from_dict(
+            1,
+            {
+                "config": {"zone_1": "enable"},
+                "status": {
+                    "lightWheel": "off",
+                    "loopSpeed": 0,
+                    "Intensity": 3,
+                    "color": "RED",
+                },
+            },
+        )
+        assert on_zone.is_on is True
+        assert on_zone.intensity == 3
+        assert on_zone.color == LightColor.RED
 
 
 class TestLogoLight:
@@ -530,7 +570,7 @@ class TestSpaInfo:
             status["collectionType"] = collection_id
         if model_id is not None:
             status["modelType"] = model_id
-        data = {"SPAModelData": {"status": status}}
+        data: dict[str, object] = {"SPAModelData": {"status": status}}
         info = SpaInfo.from_dict(data)
         assert info.brand == expected_brand
         assert info.brand_name == expected_brand_name

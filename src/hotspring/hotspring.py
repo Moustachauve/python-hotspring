@@ -11,6 +11,10 @@ import aiohttp
 import backoff
 from yarl import URL
 
+from .const import (
+    LightColor,
+    LightWheelMode,
+)
 from .exceptions import (
     HotSpringCommandError,
     HotSpringConnectionError,
@@ -336,31 +340,25 @@ class HotSpring:
     async def set_light_color(
         self,
         zone: int,
-        color: str,
-        intensity: int = 5,
-        light_wheel: str = "off",
+        color: str | LightColor,
     ) -> None:
         """Set the color of a light zone.
 
         Args:
         ----
             zone: The light zone number (1-based).
-            color: The color value. Use LightColor enum values,
-                e.g. ``LightColor.BLUE.value``.
-            intensity: The brightness intensity (0-5). Defaults to 5.
-            light_wheel: The light wheel mode. Use LightWheelMode enum values,
-                e.g. ``LightWheelMode.OFF.value``. Defaults to "off".
+            color: The color value. Use LightColor enum values or string,
+                e.g. ``LightColor.BLUE.value`` or ``"BLUE"``.
 
         """
+        color_val = color.value if isinstance(color, LightColor) else str(color)
         await self._send_command(
             {
                 "lights": {
                     "control": {
                         f"Zone{zone}": {
                             "control": {
-                                "color": color.upper(),
-                                "IntensityAbs": intensity,
-                                "lightWheel": light_wheel,
+                                "color": color_val.upper(),
                             }
                         }
                     }
@@ -390,23 +388,60 @@ class HotSpring:
             }
         )
 
-    async def set_light_brightness(self, zone: int, *, full: bool = True) -> None:
-        """Set the brightness of a light zone.
+    async def set_light_brightness(self, zone: int, brightness: int) -> None:
+        """Set the brightness intensity of a light zone (0-5).
 
         Args:
         ----
             zone: The light zone number (1-based).
-            full: True to set to full brightness ("fullon"), False to turn off ("off").
+            brightness: The brightness level (0 = off, 1 = lowest, 5 = maximum).
+
+        Raises:
+        ------
+            ValueError: If brightness is not between 0 and 5.
 
         """
-        intensity = "fullon" if full else "off"
+        if not 0 <= brightness <= 5:
+            msg = f"Brightness must be between 0 and 5, got {brightness}"
+            raise ValueError(msg)
+
         await self._send_command(
             {
                 "lights": {
                     "control": {
                         f"Zone{zone}": {
                             "control": {
-                                "Intensity": intensity,
+                                "IntensityAbs": brightness,
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+    async def set_light_wheel(
+        self,
+        zone: int,
+        mode: str | LightWheelMode = LightWheelMode.ON,
+    ) -> None:
+        """Set the light wheel (color cycle / rainbow loop) mode for a light zone.
+
+        Args:
+        ----
+            zone: The light zone number (1-based).
+            mode: The light wheel mode. Use LightWheelMode enum values or string,
+                e.g. ``LightWheelMode.ON.value``, ``"loopUp"``,
+                ``"loopDown"``, or ``"off"``. Defaults to LightWheelMode.ON.
+
+        """
+        mode_val = mode.value if isinstance(mode, LightWheelMode) else str(mode)
+        await self._send_command(
+            {
+                "lights": {
+                    "control": {
+                        f"Zone{zone}": {
+                            "control": {
+                                "lightWheel": mode_val,
                             }
                         }
                     }
@@ -430,7 +465,15 @@ class HotSpring:
             green: Green value (0-255).
             blue: Blue value (0-255).
 
+        Raises:
+        ------
+            ValueError: If any RGB component is not between 0 and 255.
+
         """
+        if not (0 <= red <= 255 and 0 <= green <= 255 and 0 <= blue <= 255):
+            msg = f"RGB values must be between 0 and 255, got ({red}, {green}, {blue})"
+            raise ValueError(msg)
+
         await self._send_command(
             {
                 "lights": {
