@@ -18,6 +18,7 @@ from hotspring import (
     HotSpringNotReadyError,
 )
 from hotspring.const import (
+    JetSpeed,
     LightColor,
     LightWheelMode,
 )
@@ -461,6 +462,74 @@ class TestCommands:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             await client.set_blower(on=True)
+
+    async def test_command_response_reactively_updates_state(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test POST /spaManager response immediately updates spa state in memory."""
+        _add_update_mocks(aresponses)
+
+        # Light command response with real hardware state
+        async def light_handler(_request: aiohttp.web.Request) -> Response:
+            resp = {
+                "lights": {
+                    "zone1": {
+                        "status": {
+                            "lightWheel": "off",
+                            "loopSpeed": 0,
+                            "Intensity": 4,
+                            "color": "custom",
+                            "RGBstate": "active",
+                            "cRed": 0,
+                            "cGreen": 255,
+                            "cBlue": 255,
+                        }
+                    }
+                }
+            }
+            return Response(status=200, text=json.dumps(resp))
+
+        # Jet command response with real hardware state
+        async def jet_handler(_request: aiohttp.web.Request) -> Response:
+            resp = {
+                "JET": {
+                    "JET1": {
+                        "status": {
+                            "speed": "off",
+                        }
+                    }
+                }
+            }
+            return Response(status=200, text=json.dumps(resp))
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", light_handler)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", jet_handler)
+
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+
+            # Initial state
+            assert client.spa.light_zones[0].intensity == 5
+            assert client.spa.light_zones[0].color == LightColor.BLUE
+            assert client.spa.jets[0].speed == JetSpeed.HIGH_SPEED
+
+            # Execute light command -> immediately updates zone 1 in memory
+            await client.set_light_rgb(1, 0, 255, 255)
+            assert client.spa.light_zones[0].intensity == 4
+            assert client.spa.light_zones[0].color == LightColor.CUSTOM
+            assert client.spa.light_zones[0].c_red == 0
+            assert client.spa.light_zones[0].c_green == 255
+            assert client.spa.light_zones[0].c_blue == 255
+            assert client.spa.light_zones[0].rgb_state == "active"
+            # Other zones untouched
+            assert client.spa.light_zones[1].zone_id == 2
+
+            # Execute jet command -> immediately updates jet 1 in memory to off
+            await client.set_jet(1, "off")
+            assert client.spa.jets[0].speed == JetSpeed.OFF
+            assert client.spa.jets[1].jet_id == 2
 
     async def test_command_sna_not_connected(
         self, aresponses: ResponsesMockServer

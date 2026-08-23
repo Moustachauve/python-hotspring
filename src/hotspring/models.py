@@ -9,6 +9,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from .const import (
     BrightnessLevel,
@@ -47,52 +51,73 @@ class Spa:
     test_metrics: SpaTestData
 
     def __init__(self, data: dict[str, object]) -> None:
-        """Initialize a Spa from the full API response.
+        """Initialize a Spa from the API response.
 
         Args:
         ----
-            data: The full API response from a GET /status call.
+            data: The API response dict from a GET /status call.
 
         """
-        self.update_from_dict(data)
+        self.heater = Heater.from_dict({})
+        self.jets = []
+        self.blower = Blower.from_dict({})
+        self.light_zones = []
+        self.logo_light = LogoLight.from_dict({})
+        self.clean_cycle = CleanCycle.from_dict({})
+        self.spa_lock = SpaLock.from_dict({})
+        self.water_care = WaterCare.from_dict({})
+        self.freshwater_iq = FreshWaterIQ.from_dict({})
+        self.test_metrics = SpaTestData.from_dict({})
+        self.energy_savings = []
+        self.versions = Versions.from_dict({})
+        self.info = SpaInfo.from_dict({})
+        self.connection_status = ConnectionStatus.from_dict({})
+        self.diagnostics = Diagnostics.from_dict({})
 
-    def update_from_dict(self, data: dict[str, object]) -> Spa:
-        """Update the Spa object from a /status API response.
+        if data:
+            self.update_from_dict(data)
+
+    def update_from_dict(self, data: dict[str, object]) -> set[str]:
+        """Update the Spa object from a /status response or partial command response.
 
         Args:
         ----
-            data: The full JSON response from GET /status.
+            data: The JSON response dict from GET /status or POST /spaManager.
 
         Returns:
         -------
-            The updated Spa object.
+            The set of updated attribute names.
 
         """
-        self.heater = Heater.from_dict(data.get("heater", {}))
-        self.jets = Jet.list_from_dict(data.get("JET", {}))
-        self.blower = Blower.from_dict(data.get("blower", {}))
-        self.light_zones = LightZone.list_from_dict(data.get("lights", {}))
-        self.logo_light = LogoLight.from_dict(data.get("logoLight", {}))
-        self.clean_cycle = CleanCycle.from_dict(data.get("cleanCycle", {}))
-        self.spa_lock = SpaLock.from_dict(data.get("spaLock", {}))
-        self.water_care = WaterCare.from_dict(data.get("waterCare", {}))
-        self.freshwater_iq = FreshWaterIQ.from_dict(data.get("FWIQ_Parameters", {}))
-        self.test_metrics = SpaTestData.from_dict(data.get("test_data", {}))
-        self.energy_savings = EnergySaving.list_from_dict(data.get("energySavings", {}))
-        self.versions = Versions.from_dict(
-            data.get("productVersions", {}).get("status", {})
-        )
-        # These are populated by separate API calls
-        if not hasattr(self, "info"):
-            self.info = SpaInfo.from_dict({})
-        if not hasattr(self, "connection_status"):
-            self.connection_status = ConnectionStatus.from_dict({})
-        if not hasattr(self, "diagnostics"):
-            self.diagnostics = Diagnostics.from_dict({})
-        if not hasattr(self, "test_metrics"):
-            self.test_metrics = SpaTestData.from_dict({})
+        updated: set[str] = set()
 
-        return self
+        for json_key, attr_name, parser in _SECTION_PARSERS:
+            if json_key in data and isinstance(data[json_key], dict):
+                setattr(self, attr_name, parser(data[json_key]))
+                updated.add(attr_name)
+
+        if "JET" in data and isinstance(data["JET"], dict):
+            self.jets = _merge_entities(
+                self.jets, Jet.list_from_dict(data["JET"]), lambda j: j.jet_id
+            )
+            updated.add("jets")
+
+        if "lights" in data and isinstance(data["lights"], dict):
+            self.light_zones = _merge_entities(
+                self.light_zones,
+                LightZone.list_from_dict(data["lights"]),
+                lambda z: z.zone_id,
+            )
+            updated.add("light_zones")
+
+        if "productVersions" in data and isinstance(data["productVersions"], dict):
+            status = data["productVersions"].get("status", {})
+            self.versions = Versions.from_dict(
+                status if isinstance(status, dict) else {}
+            )
+            updated.add("versions")
+
+        return updated
 
     def update_info(self, data: dict[str, object]) -> None:
         """Update spa identity from /startup and /spamodel responses.
@@ -880,6 +905,29 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
             heater_power=debug.get("heaterPower", "0"),
             jet3_power=debug.get("jet3Power", "0"),
         )
+
+
+def _merge_entities[T, K](
+    existing: list[T], incoming: list[T], key_func: Callable[[T], K]
+) -> list[T]:
+    """Merge incoming partial updates into an existing list by entity ID."""
+    if existing and len(incoming) < len(existing):
+        incoming_map = {key_func(item): item for item in incoming}
+        return [incoming_map.get(key_func(item), item) for item in existing]
+    return incoming
+
+
+_SECTION_PARSERS: tuple[tuple[str, str, Callable[[dict[str, object]], object]], ...] = (
+    ("heater", "heater", Heater.from_dict),
+    ("blower", "blower", Blower.from_dict),
+    ("logoLight", "logo_light", LogoLight.from_dict),
+    ("cleanCycle", "clean_cycle", CleanCycle.from_dict),
+    ("spaLock", "spa_lock", SpaLock.from_dict),
+    ("waterCare", "water_care", WaterCare.from_dict),
+    ("FWIQ_Parameters", "freshwater_iq", FreshWaterIQ.from_dict),
+    ("test_data", "test_metrics", SpaTestData.from_dict),
+    ("energySavings", "energy_savings", EnergySaving.list_from_dict),
+)
 
 
 def _parse_temperature(value: str | float | None) -> float | None:

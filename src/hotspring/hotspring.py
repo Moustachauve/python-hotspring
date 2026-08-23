@@ -296,7 +296,11 @@ class HotSpring:
             raise HotSpringNotReadyError(msg)
 
         try:
-            await self.request("/spaManager", method="POST", data=payload)
+            response_data = await self.request(
+                "/spaManager", method="POST", data=payload
+            )
+            if self.spa is not None and isinstance(response_data, dict):
+                self.spa.update_from_dict(response_data)
         except HotSpringError as exception:
             msg = f"Command failed: {payload}"
             raise HotSpringCommandError(msg) from exception

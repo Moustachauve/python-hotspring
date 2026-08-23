@@ -747,6 +747,75 @@ class TestSpa:
         assert spa.heater.is_on is False
         assert spa.heater.set_temperature == 98.0
 
+    def test_partial_update_single_light_zone(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test that updating a single light zone preserves other zones."""
+        spa = Spa(status_response)
+        assert len(spa.light_zones) == 4
+        assert spa.light_zones[0].color == LightColor.BLUE
+        assert spa.light_zones[1].zone_id == 2
+
+        # Simulate a command response containing only Zone 1
+        partial_payload: dict[str, object] = {
+            "lights": {
+                "zone1": {
+                    "status": {
+                        "lightWheel": "off",
+                        "loopSpeed": 0,
+                        "Intensity": 4,
+                        "color": "custom",
+                        "RGBstate": "active",
+                        "cRed": 0,
+                        "cGreen": 255,
+                        "cBlue": 255,
+                    }
+                }
+            }
+        }
+        updated = spa.update_from_dict(partial_payload)
+        assert updated == {"light_zones"}
+
+        # Zone 1 should be updated to custom Cyan with intensity 4
+        assert len(spa.light_zones) == 4
+        assert spa.light_zones[0].intensity == 4
+        assert spa.light_zones[0].color == LightColor.CUSTOM
+        assert spa.light_zones[0].c_red == 0
+        assert spa.light_zones[0].c_green == 255
+        assert spa.light_zones[0].c_blue == 255
+        assert spa.light_zones[0].rgb_state == "active"
+
+        # Other zones should be preserved intact
+        assert spa.light_zones[1].zone_id == 2
+        assert spa.light_zones[2].zone_id == 3
+        assert spa.light_zones[3].zone_id == 4
+
+    def test_partial_update_single_jet(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test that updating a single jet preserves other jets."""
+        spa = Spa(status_response)
+        assert len(spa.jets) == 3
+        assert spa.jets[0].speed == JetSpeed.HIGH_SPEED
+
+        # Simulate a command response updating JET1 to off
+        partial_payload: dict[str, object] = {
+            "JET": {
+                "JET1": {
+                    "status": {
+                        "speed": "off",
+                    }
+                }
+            }
+        }
+        updated = spa.update_from_dict(partial_payload)
+        assert updated == {"jets"}
+
+        assert len(spa.jets) == 3
+        assert spa.jets[0].speed == JetSpeed.OFF
+        assert spa.jets[1].jet_id == 2
+        assert spa.jets[2].jet_id == 3
+
     def test_update_info_startup(self, startup_response: dict[str, object]) -> None:
         """Test updating spa info from startup response."""
         spa = Spa({})
