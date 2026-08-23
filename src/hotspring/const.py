@@ -82,6 +82,7 @@ class LightColor(Enum):
     """
 
     UNKNOWN = "unknown"
+    CUSTOM = "CUSTOM"
     RED = "RED"
     BLUE = "BLUE"
     GREEN = "GREEN"
@@ -94,7 +95,7 @@ class LightColor(Enum):
     def build(cls, value: str | None) -> LightColor:
         """Parse a raw API string into a LightColor.
 
-        Case-insensitive matching (real API returns e.g. "BLUE").
+        Case-insensitive matching (real API returns e.g. "BLUE", "custom").
 
         Args:
         ----
