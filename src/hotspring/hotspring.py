@@ -398,11 +398,11 @@ class HotSpring:
 
         Raises:
         ------
-            ValueError: If brightness is not between 0 and 5.
+            ValueError: If brightness is not an integer between 0 and 5.
 
         """
-        if not 0 <= brightness <= 5:
-            msg = f"Brightness must be between 0 and 5, got {brightness}"
+        if type(brightness) is not int or not 0 <= brightness <= 5:
+            msg = f"Brightness must be an integer between 0 and 5, got {brightness}"
             raise ValueError(msg)
 
         await self._send_command(
@@ -467,12 +467,16 @@ class HotSpring:
 
         Raises:
         ------
-            ValueError: If any RGB component is not between 0 and 255.
+            ValueError: If any RGB component is not an integer between 0 and 255.
 
         """
-        if not (0 <= red <= 255 and 0 <= green <= 255 and 0 <= blue <= 255):
-            msg = f"RGB values must be between 0 and 255, got ({red}, {green}, {blue})"
-            raise ValueError(msg)
+        for component in (red, green, blue):
+            if type(component) is not int or not 0 <= component <= 255:
+                msg = (
+                    f"RGB values must be integers between 0 and 255, "
+                    f"got ({red}, {green}, {blue})"
+                )
+                raise ValueError(msg)
 
         await self._send_command(
             {

@@ -42,7 +42,13 @@ async def main() -> None:
         original_color = zone1.color if zone1 else LightColor.BLUE
         original_intensity = zone1.intensity if zone1 else 5
         original_is_on = zone1.is_on if zone1 else False
-        print(f"Original state: Color={original_color}, Intensity={original_intensity}, IsOn={original_is_on}\n")
+        original_red = zone1.c_red if zone1 else 0
+        original_green = zone1.c_green if zone1 else 0
+        original_blue = zone1.c_blue if zone1 else 0
+        print(
+            f"Original state: Color={original_color}, Intensity={original_intensity}, "
+            f"IsOn={original_is_on}\n"
+        )
 
         print("--- Step 1: Cycling through Colors ---")
         for color in COLORS:
@@ -57,7 +63,15 @@ async def main() -> None:
             await asyncio.sleep(DELAY)
 
         print("\n--- Step 3: Restoring Original State ---")
-        if original_color != LightColor.UNKNOWN:
+        if original_color == LightColor.CUSTOM:
+            print(
+                f"  ✦  Restoring Custom RGB → "
+                f"({original_red}, {original_green}, {original_blue})"
+            )
+            await spa.set_light_rgb(
+                1, original_red, original_green, original_blue
+            )
+        elif original_color != LightColor.UNKNOWN:
             print(f"  ✦  Restoring Color → {original_color.name}")
             await spa.set_light_color(1, original_color)
         if original_is_on:
