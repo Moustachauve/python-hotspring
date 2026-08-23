@@ -434,10 +434,8 @@ class LightZone:
 
         color = LightColor.build(status.get("color"))
         light_wheel = LightWheelMode.build(status.get("lightWheel"))
-        is_on = color not in (
-            LightColor.OFF,
-            LightColor.UNKNOWN,
-        ) or light_wheel not in (LightWheelMode.OFF, LightWheelMode.UNKNOWN)
+        intensity = int(status.get("Intensity", 0))
+        is_on = intensity > 0
 
         return LightZone(
             zone_id=zone_id,
@@ -445,7 +443,7 @@ class LightZone:
             is_on=is_on,
             color=color,
             light_wheel=light_wheel,
-            intensity=int(status.get("Intensity", 0)),
+            intensity=intensity,
             loop_speed=int(status.get("loopSpeed", 0)),
         )
 

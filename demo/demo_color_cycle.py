@@ -1,8 +1,9 @@
-"""Demo: Cycle through spa light colors.
+"""Demo: Cycle through spa light colors and brightness levels.
 
-This script demonstrates how to cycle through multiple predefined colors on
-Light Zone 1 with a 2-second delay between each change. It concludes by
-restoring the original color.
+This script demonstrates how to:
+1. Cycle through predefined colors on Light Zone 1.
+2. Step through all discrete brightness levels (1 to 5).
+3. Restore the original color and brightness.
 """
 
 import asyncio
@@ -20,15 +21,17 @@ COLORS = [
     LightColor.RED,
     LightColor.BLUE,
     LightColor.GREEN,
+    LightColor.YELLOW,
+    LightColor.WHITE,
     LightColor.MAGENTA,
     LightColor.AQUA,
 ]
 
-DELAY = 2  # seconds between color changes
+DELAY = 2  # seconds between changes
 
 
 async def main() -> None:
-    """Cycle Zone 1 through five colors."""
+    """Cycle Zone 1 through colors and brightness levels."""
     host = "192.168.11.88"
     async with HotSpring(host) as spa:
         print(f"Connecting to {host}...")
@@ -36,20 +39,34 @@ async def main() -> None:
         assert spa.spa is not None
 
         zone1 = next((z for z in spa.spa.light_zones if z.zone_id == 1), None)
-        original_color = zone1.color if zone1 else None
-        print(f"Original color: {original_color}\n")
+        original_color = zone1.color if zone1 else LightColor.BLUE
+        original_intensity = zone1.intensity if zone1 else 5
+        original_is_on = zone1.is_on if zone1 else False
+        print(f"Original state: Color={original_color}, Intensity={original_intensity}, IsOn={original_is_on}\n")
 
+        print("--- Step 1: Cycling through Colors ---")
         for color in COLORS:
-            print(f"  ✦  Setting → {color.name}")
-            await spa.set_light_color(1, color.value)
+            print(f"  ✦  Setting Color → {color.name}")
+            await spa.set_light_color(1, color)
             await asyncio.sleep(DELAY)
 
-        print(f"\nDone! Restoring original color ({original_color})...")
-        if original_color and original_color not in (
-            LightColor.UNKNOWN,
-            LightColor.OFF,
-        ):
-            await spa.set_light_color(1, original_color.value)
+        print("\n--- Step 2: Cycling through Brightness Levels (1 to 5) ---")
+        for level in range(1, 6):
+            print(f"  ✦  Setting Brightness → Level {level}/5")
+            await spa.set_light_brightness(1, level)
+            await asyncio.sleep(DELAY)
+
+        print("\n--- Step 3: Restoring Original State ---")
+        if original_color != LightColor.UNKNOWN:
+            print(f"  ✦  Restoring Color → {original_color.name}")
+            await spa.set_light_color(1, original_color)
+        if original_is_on:
+            print(f"  ✦  Restoring Brightness → {original_intensity}")
+            await spa.set_light_brightness(1, original_intensity)
+        else:
+            print("  ✦  Turning Zone 1 Off...")
+            await spa.turn_off_light(1)
+
         print("Finished.")
 
 

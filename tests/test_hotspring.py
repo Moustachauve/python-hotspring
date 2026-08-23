@@ -17,6 +17,10 @@ from hotspring import (
     HotSpringError,
     HotSpringNotReadyError,
 )
+from hotspring.const import (
+    LightColor,
+    LightWheelMode,
+)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -245,8 +249,6 @@ class TestCommands:
                         "Zone1": {
                             "control": {
                                 "color": "BLUE",
-                                "IntensityAbs": 5,
-                                "lightWheel": "off",
                             }
                         }
                     }
@@ -259,6 +261,31 @@ class TestCommands:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             await client.set_light_color(1, "Blue")
+
+    async def test_set_light_color_enum(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting light color using LightColor enum."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {
+                "lights": {
+                    "control": {
+                        "Zone2": {
+                            "control": {
+                                "color": "RED",
+                            }
+                        }
+                    }
+                }
+            }
+            return Response(status=200, text='{"status": "ok"}')
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            await client.set_light_color(2, LightColor.RED)
 
     async def test_turn_off_light(self, aresponses: ResponsesMockServer) -> None:
         """Test turning off a light zone."""
@@ -278,13 +305,21 @@ class TestCommands:
             await client.turn_off_light(1)
 
     async def test_set_light_brightness(self, aresponses: ResponsesMockServer) -> None:
-        """Test setting light brightness."""
+        """Test setting light brightness level (0-5)."""
         _add_update_mocks(aresponses)
 
         async def handler(request: aiohttp.web.Request) -> Response:
             data = await request.json()
             assert data == {
-                "lights": {"control": {"Zone1": {"control": {"Intensity": "fullon"}}}}
+                "lights": {
+                    "control": {
+                        "Zone1": {
+                            "control": {
+                                "IntensityAbs": 3,
+                            }
+                        }
+                    }
+                }
             }
             return Response(status=200, text='{"status": "ok"}')
 
@@ -292,7 +327,45 @@ class TestCommands:
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
-            await client.set_light_brightness(1)
+            await client.set_light_brightness(1, 3)
+
+    async def test_set_light_brightness_invalid(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test setting invalid light brightness levels raises ValueError."""
+        _add_update_mocks(aresponses)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(ValueError, match="Brightness must be between 0 and 5"):
+                await client.set_light_brightness(1, -1)
+            with pytest.raises(ValueError, match="Brightness must be between 0 and 5"):
+                await client.set_light_brightness(1, 6)
+
+    async def test_set_light_wheel(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting light wheel mode."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {
+                "lights": {
+                    "control": {
+                        "Zone1": {
+                            "control": {
+                                "lightWheel": "on",
+                            }
+                        }
+                    }
+                }
+            }
+            return Response(status=200, text='{"status": "ok"}')
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            await client.set_light_wheel(1, LightWheelMode.ON)
 
     async def test_set_light_rgb(self, aresponses: ResponsesMockServer) -> None:
         """Test setting exact RGB light color."""
@@ -322,6 +395,20 @@ class TestCommands:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             await client.set_light_rgb(1, 255, 0, 128)
+
+    async def test_set_light_rgb_invalid(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting invalid RGB components raises ValueError."""
+        _add_update_mocks(aresponses)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            err_msg = "RGB values must be between 0 and 255"
+            with pytest.raises(ValueError, match=err_msg):
+                await client.set_light_rgb(1, 256, 0, 0)
+            with pytest.raises(ValueError, match=err_msg):
+                await client.set_light_rgb(1, 0, -1, 0)
+            with pytest.raises(ValueError, match=err_msg):
+                await client.set_light_rgb(1, 0, 0, 300)
 
     async def test_set_heating_mode(self, aresponses: ResponsesMockServer) -> None:
         """Test setting heating mode."""
