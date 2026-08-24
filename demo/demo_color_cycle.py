@@ -27,7 +27,7 @@ COLORS = [
     LightColor.AQUA,
 ]
 
-DELAY = 2  # seconds between changes
+DELAY = 0.5  # seconds between changes
 
 
 async def main() -> None:
@@ -75,9 +75,12 @@ async def main() -> None:
                 f"({original_red}, {original_green}, {original_blue})"
             )
             await spa.set_light_rgb(1, original_red, original_green, original_blue)
+            await asyncio.sleep(DELAY)
         elif original_color != LightColor.UNKNOWN:
             print(f"  ✦  Restoring Color → {original_color.name}")
             await spa.set_light_color(1, original_color)
+            await asyncio.sleep(DELAY)
+
         if original_is_on:
             print(f"  ✦  Restoring Brightness → {original_intensity}")
             await spa.set_light_brightness(1, original_intensity)
@@ -85,6 +88,8 @@ async def main() -> None:
             print("  ✦  Turning Zone 1 Off...")
             await spa.turn_off_light(1)
 
+        # Wait a moment for the HNA/LoRA bridge to process before exiting
+        await asyncio.sleep(2)
         print("Finished.")
 
 
