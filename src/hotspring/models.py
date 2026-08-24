@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -91,10 +91,10 @@ class Spa:
         """
         updated: set[str] = set()
 
-        for json_key, attr_name, parser in _SECTION_PARSERS:
-            if json_key in data and isinstance(data[json_key], dict):
-                setattr(self, attr_name, parser(data[json_key]))
-                updated.add(attr_name)
+        for section in _SECTION_PARSERS:
+            if section.json_key in data and isinstance(data[section.json_key], dict):
+                setattr(self, section.attr_name, section.parser(data[section.json_key]))
+                updated.add(section.attr_name)
 
         if "JET" in data and isinstance(data["JET"], dict):
             new_jets = Jet.list_from_dict(data["JET"], existing=self.jets)
@@ -109,6 +109,15 @@ class Spa:
                 self.light_zones, new_zones, lambda z: z.zone_id
             )
             updated.add("light_zones")
+
+        if "energySavings" in data and isinstance(data["energySavings"], dict):
+            new_schedules = EnergySaving.list_from_dict(
+                data["energySavings"], existing=self.energy_savings
+            )
+            self.energy_savings = _merge_entities(
+                self.energy_savings, new_schedules, lambda s: s.schedule_id
+            )
+            updated.add("energy_savings")
 
         if "productVersions" in data and isinstance(data["productVersions"], dict):
             status = data["productVersions"].get("status", {})
@@ -748,41 +757,67 @@ class EnergySaving:
     duration: int
 
     @staticmethod
-    def from_dict(schedule_id: int, data: dict[str, object]) -> EnergySaving:
+    def from_dict(
+        schedule_id: int,
+        data: dict[str, object],
+        existing: EnergySaving | None = None,
+    ) -> EnergySaving:
         """Create an EnergySaving from API response data.
 
         Args:
         ----
             schedule_id: The schedule number (1-based).
             data: The ``energySavingN`` dict from the /status response.
+            existing: Optional existing EnergySaving instance to preserve cached fields.
 
         Returns:
         -------
             An EnergySaving instance.
 
         """
-        status = data.get("status", {})
+        mode = existing.mode if existing else 0
+        start_hour = existing.start_hour if existing else 0
+        start_minute = existing.start_minute if existing else 0
+        duration = existing.duration if existing else 0
+
+        status = data.get("status")
+        if isinstance(status, dict):
+            if "mode" in status:
+                mode = int(status.get("mode", 0))
+            if "startHour" in status:
+                start_hour = int(status.get("startHour", 0))
+            if "startMinute" in status:
+                start_minute = int(status.get("startMinute", 0))
+            if "duration" in status:
+                duration = int(status.get("duration", 0))
+
         return EnergySaving(
             schedule_id=schedule_id,
-            mode=int(status.get("mode", 0)),
-            start_hour=int(status.get("startHour", 0)),
-            start_minute=int(status.get("startMinute", 0)),
-            duration=int(status.get("duration", 0)),
+            mode=mode,
+            start_hour=start_hour,
+            start_minute=start_minute,
+            duration=duration,
         )
 
     @staticmethod
-    def list_from_dict(data: dict[str, object]) -> list[EnergySaving]:
+    def list_from_dict(
+        data: dict[str, object],
+        existing: list[EnergySaving] | None = None,
+    ) -> list[EnergySaving]:
         """Parse all energy saving schedules from the /status response.
 
         Args:
         ----
             data: The ``energySavings`` dict from the /status response.
+            existing: Optional existing list of EnergySaving instances
+                for field preservation.
 
         Returns:
         -------
             A list of EnergySaving instances.
 
         """
+        existing_map = {s.schedule_id: s for s in existing} if existing else {}
         schedules: list[EnergySaving] = []
         for key, value in data.items():
             if key.startswith("energySaving") and isinstance(value, dict):
@@ -790,7 +825,11 @@ class EnergySaving:
                     schedule_id = int(key[12:])
                 except ValueError:
                     continue
-                schedules.append(EnergySaving.from_dict(schedule_id, value))
+                schedules.append(
+                    EnergySaving.from_dict(
+                        schedule_id, value, existing=existing_map.get(schedule_id)
+                    )
+                )
         return sorted(schedules, key=lambda s: s.schedule_id)
 
 
@@ -965,25 +1004,32 @@ def _merge_entities[T, K](
     existing: list[T], incoming: list[T], key_func: Callable[[T], K]
 ) -> list[T]:
     """Merge incoming partial updates into an existing list by entity ID."""
-    if not existing:
-        return incoming
     incoming_map = {key_func(item): item for item in incoming}
+    if not existing:
+        return list(incoming_map.values())
     result = [incoming_map.get(key_func(item), item) for item in existing]
     existing_keys = {key_func(item) for item in existing}
-    result.extend(item for item in incoming if key_func(item) not in existing_keys)
+    result.extend(incoming_map[k] for k in incoming_map if k not in existing_keys)
     return result
 
 
-_SECTION_PARSERS: tuple[tuple[str, str, Callable[[dict[str, object]], object]], ...] = (
-    ("heater", "heater", Heater.from_dict),
-    ("blower", "blower", Blower.from_dict),
-    ("logoLight", "logo_light", LogoLight.from_dict),
-    ("cleanCycle", "clean_cycle", CleanCycle.from_dict),
-    ("spaLock", "spa_lock", SpaLock.from_dict),
-    ("waterCare", "water_care", WaterCare.from_dict),
-    ("FWIQ_Parameters", "freshwater_iq", FreshWaterIQ.from_dict),
-    ("test_data", "test_metrics", SpaTestData.from_dict),
-    ("energySavings", "energy_savings", EnergySaving.list_from_dict),
+class _SectionParser(NamedTuple):
+    """Mapping between JSON response key, Spa attribute name, and parser callable."""
+
+    json_key: str
+    attr_name: str
+    parser: Callable[[dict[str, object]], object]
+
+
+_SECTION_PARSERS: tuple[_SectionParser, ...] = (
+    _SectionParser("heater", "heater", Heater.from_dict),
+    _SectionParser("blower", "blower", Blower.from_dict),
+    _SectionParser("logoLight", "logo_light", LogoLight.from_dict),
+    _SectionParser("cleanCycle", "clean_cycle", CleanCycle.from_dict),
+    _SectionParser("spaLock", "spa_lock", SpaLock.from_dict),
+    _SectionParser("waterCare", "water_care", WaterCare.from_dict),
+    _SectionParser("FWIQ_Parameters", "freshwater_iq", FreshWaterIQ.from_dict),
+    _SectionParser("test_data", "test_metrics", SpaTestData.from_dict),
 )
 
 

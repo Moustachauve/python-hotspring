@@ -743,9 +743,110 @@ class TestSpa:
         # Modify the fixture to turn heater off
         modified = status_response.copy()
         modified["heater"] = {"status": {"heater": "off", "setWaterTemperature": "98"}}
-        spa.update_from_dict(modified)
+        updated = spa.update_from_dict(modified)
+        assert "heater" in updated
         assert spa.heater.is_on is False
         assert spa.heater.set_temperature == 98.0
+
+    def test_update_from_dict_empty(self, status_response: dict[str, object]) -> None:
+        """Test updating with empty dict returns empty set and preserves state."""
+        spa = Spa(status_response)
+        updated = spa.update_from_dict({})
+        assert updated == set()
+        assert spa.heater.is_on is True
+
+    def test_update_from_dict_full_reparse(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test full re-parsing from status response returns all updated names."""
+        spa = Spa({})
+        updated = spa.update_from_dict(status_response)
+        assert "heater" in updated
+        assert "jets" in updated
+        assert "blower" in updated
+        assert "light_zones" in updated
+        assert "logo_light" in updated
+        assert "clean_cycle" in updated
+        assert "spa_lock" in updated
+        assert "water_care" in updated
+        assert "freshwater_iq" in updated
+        assert "test_metrics" in updated
+        assert "energy_savings" in updated
+        assert "versions" in updated
+
+    def test_update_from_dict_non_dict_section(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test that non-dict section values in response are gracefully ignored."""
+        spa = Spa(status_response)
+        updated = spa.update_from_dict(
+            {
+                "heater": "invalid",
+                "JET": [1, 2, 3],
+                "lights": None,
+                "energySavings": 123,
+                "productVersions": "bad",
+            }
+        )
+        assert updated == set()
+        assert spa.heater.is_on is True
+
+    def test_update_from_dict_multiple_sections(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test updating multiple sections at once."""
+        spa = Spa(status_response)
+        payload: dict[str, object] = {
+            "heater": {"status": {"heater": "off", "setWaterTemperature": "100"}},
+            "blower": {"config": {"blower": "enable"}, "status": {"blower": "on"}},
+        }
+        updated = spa.update_from_dict(payload)
+        assert updated == {"heater", "blower"}
+        assert spa.heater.is_on is False
+        assert spa.blower.is_on is True
+
+    def test_update_from_dict_product_versions_partial(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test partial update containing productVersions."""
+        spa = Spa(status_response)
+        payload: dict[str, object] = {
+            "productVersions": {
+                "status": {
+                    "ControlBoxFirmwareVersion": "9.9.9",
+                }
+            }
+        }
+        updated = spa.update_from_dict(payload)
+        assert updated == {"versions"}
+        assert spa.versions.control_box == "9.9.9"
+        assert spa.versions.control_panel == ""
+
+    def test_update_from_dict_energy_savings_partial(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test partial update of energy savings preserves other schedules."""
+        spa = Spa(status_response)
+        initial_len = len(spa.energy_savings)
+        assert initial_len > 0
+
+        payload: dict[str, object] = {
+            "energySavings": {
+                "energySaving1": {
+                    "status": {
+                        "mode": "1",
+                        "startHour": "10",
+                        "startMinute": "30",
+                        "duration": "120",
+                    }
+                }
+            }
+        }
+        updated = spa.update_from_dict(payload)
+        assert updated == {"energy_savings"}
+        assert len(spa.energy_savings) == initial_len
+        assert spa.energy_savings[0].start_hour == 10
+        assert spa.energy_savings[0].duration == 120
 
     def test_partial_update_single_light_zone(
         self, status_response: dict[str, object]
@@ -845,6 +946,78 @@ class TestSpa:
         assert result[2].jet_id == 3
         assert result[2].speed == JetSpeed.LOW_SPEED
 
+    def test_merge_entities_with_duplicate_incoming_keys(self) -> None:
+        """Test _merge_entities deduplicates incoming keys cleanly."""
+        from hotspring.models import _merge_entities
+
+        existing = [
+            Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
+        ]
+        incoming = [
+            Jet(jet_id=2, speed=JetSpeed.LOW_SPEED, is_enabled=True, on_seconds=50),
+            Jet(jet_id=2, speed=JetSpeed.HIGH_SPEED, is_enabled=True, on_seconds=100),
+        ]
+        result = _merge_entities(existing, incoming, lambda j: j.jet_id)
+        assert len(result) == 2
+        assert result[0].jet_id == 1
+        assert result[1].jet_id == 2
+        assert result[1].speed == JetSpeed.HIGH_SPEED
+
+    def test_merge_entities_empty_incoming(self) -> None:
+        """Test _merge_entities with empty incoming list returns existing."""
+        from hotspring.models import _merge_entities
+
+        existing = [
+            Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
+        ]
+        result = _merge_entities(existing, [], lambda j: j.jet_id)
+        assert result == existing
+
+    def test_merge_entities_empty_existing(self) -> None:
+        """Test _merge_entities with empty existing list deduplicates incoming."""
+        from hotspring.models import _merge_entities
+
+        incoming = [
+            Jet(jet_id=1, speed=JetSpeed.LOW_SPEED, is_enabled=True, on_seconds=50),
+            Jet(jet_id=1, speed=JetSpeed.HIGH_SPEED, is_enabled=True, on_seconds=100),
+        ]
+        result = _merge_entities([], incoming, lambda j: j.jet_id)
+        assert len(result) == 1
+        assert result[0].jet_id == 1
+        assert result[0].speed == JetSpeed.HIGH_SPEED
+
+    def test_jet_list_from_dict_case_insensitive(self) -> None:
+        """Test Jet.list_from_dict parses case-insensitive keys."""
+        data: dict[str, object] = {
+            "jet1": {"status": {"speed": "highSpeed"}},
+            "Jet2": {"status": {"speed": "lowSpeed"}},
+            "JET3": {"status": {"speed": "off"}},
+        }
+        jets = Jet.list_from_dict(data)
+        assert len(jets) == 3
+        assert jets[0].jet_id == 1
+        assert jets[0].speed == JetSpeed.HIGH_SPEED
+        assert jets[1].jet_id == 2
+        assert jets[1].speed == JetSpeed.LOW_SPEED
+        assert jets[2].jet_id == 3
+        assert jets[2].speed == JetSpeed.OFF
+
+    def test_light_zone_list_from_dict_case_insensitive(self) -> None:
+        """Test LightZone.list_from_dict parses case-insensitive keys."""
+        data: dict[str, object] = {
+            "Zone1": {"status": {"color": "BLUE", "Intensity": 3}},
+            "ZONE2": {"status": {"color": "RED", "Intensity": 4}},
+            "zone3": {"status": {"color": "GREEN", "Intensity": 5}},
+        }
+        zones = LightZone.list_from_dict(data)
+        assert len(zones) == 3
+        assert zones[0].zone_id == 1
+        assert zones[0].color == LightColor.BLUE
+        assert zones[1].zone_id == 2
+        assert zones[1].color == LightColor.RED
+        assert zones[2].zone_id == 3
+        assert zones[2].color == LightColor.GREEN
+
     def test_update_info_startup(self, startup_response: dict[str, object]) -> None:
         """Test updating spa info from startup response."""
         spa = Spa({})
@@ -865,6 +1038,29 @@ class TestSpa:
         spa = Spa({})
         spa.update_diagnostics(debug_data_response)
         assert spa.diagnostics.spa_failure_state == SpaFailureState.OK
+
+    def test_update_freshwater_iq(self) -> None:
+        """Test updating FreshWater IQ data."""
+        spa = Spa({})
+        spa.update_freshwater_iq(
+            {
+                "waterCare": {
+                    "status": {
+                        "FWIQstatus": {
+                            "Conductivity": 1500,
+                            "ORP": 750,
+                            "Chlorine": 3.5,
+                            "pH": 7.4,
+                            "SensorLife": 95.0,
+                            "FWIQinstalled": "installed",
+                        }
+                    }
+                }
+            }
+        )
+        assert spa.freshwater_iq.installed is True
+        assert spa.freshwater_iq.chlorine == 3.5
+        assert spa.freshwater_iq.ph == 7.4
 
     @pytest.mark.parametrize(
         ("value", "expected"),
