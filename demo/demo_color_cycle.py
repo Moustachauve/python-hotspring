@@ -68,9 +68,7 @@ async def main() -> None:
                 f"  ✦  Restoring Custom RGB → "
                 f"({original_red}, {original_green}, {original_blue})"
             )
-            await spa.set_light_rgb(
-                1, original_red, original_green, original_blue
-            )
+            await spa.set_light_rgb(1, original_red, original_green, original_blue)
         elif original_color != LightColor.UNKNOWN:
             print(f"  ✦  Restoring Color → {original_color.name}")
             await spa.set_light_color(1, original_color)
