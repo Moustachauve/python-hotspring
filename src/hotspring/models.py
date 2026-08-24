@@ -127,7 +127,8 @@ class Spa:
         if "productVersions" in data and isinstance(data["productVersions"], dict):
             status = data["productVersions"].get("status", {})
             self.versions = Versions.from_dict(
-                status if isinstance(status, dict) else {}
+                status if isinstance(status, dict) else {},
+                existing=self.versions,
             )
             updated.add("versions")
 
@@ -799,7 +800,10 @@ class FreshWaterIQ:
                 data.get("current_SensorLife_Percentage", 0.0)
             )
 
-        base = existing or FreshWaterIQ(installed=True)
+        if kwargs:
+            kwargs["installed"] = True
+
+        base = existing or FreshWaterIQ()
         return replace(base, **kwargs)
 
 
@@ -1053,7 +1057,11 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
             A Diagnostics instance.
 
         """
-        debug = data.get("debugData", {}).get("status", {})
+        debug_data = data.get("debugData")
+        if not isinstance(debug_data, dict):
+            return Diagnostics()
+
+        debug = debug_data.get("status")
         if not isinstance(debug, dict) or not debug:
             return Diagnostics()
 
