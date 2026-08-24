@@ -18,6 +18,7 @@ from hotspring import (
     HotSpringNotReadyError,
 )
 from hotspring.const import (
+    HeatingMode,
     JetSpeed,
     LightColor,
     LightWheelMode,
@@ -238,6 +239,21 @@ class TestCommands:
             await client.update()
             await client.set_jet(1, "highSpeed")
 
+    async def test_set_jet_enum(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting jet speed using JetSpeed enum."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"JET": {"JET2": {"control": "lowSpeed"}}}
+            return Response(status=200, text='{"status": "ok"}')
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            await client.set_jet(2, JetSpeed.LOW_SPEED)
+
     async def test_set_light_color(self, aresponses: ResponsesMockServer) -> None:
         """Test setting light color."""
         _add_update_mocks(aresponses)
@@ -426,6 +442,21 @@ class TestCommands:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             await client.set_heating_mode("heatWithBoost")
+
+    async def test_set_heating_mode_enum(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting heating mode using HeatingMode enum."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"heater": {"control": {"heatingMode": "heatWithBoost"}}}
+            return Response(status=200, text='{"status": "ok"}')
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            await client.set_heating_mode(HeatingMode.HEAT_WITH_BOOST)
 
     async def test_set_clean_cycle(self, aresponses: ResponsesMockServer) -> None:
         """Test setting clean cycle."""

@@ -12,6 +12,8 @@ import backoff
 from yarl import URL
 
 from .const import (
+    HeatingMode,
+    JetSpeed,
     LightColor,
     LightWheelMode,
 )
@@ -318,28 +320,30 @@ class HotSpring:
             {"heater": {"control": {"temperatureABS": str(temperature)}}}
         )
 
-    async def set_heating_mode(self, mode: str) -> None:
+    async def set_heating_mode(self, mode: str | HeatingMode) -> None:
         """Set the heating mode.
 
         Args:
         ----
-            mode: The heating mode value. Use HeatingMode enum values,
-                e.g. ``HeatingMode.HEAT_WITH_BOOST.value``.
+            mode: The heating mode value. Use HeatingMode enum values or string,
+                e.g. ``HeatingMode.HEAT_WITH_BOOST.value`` or ``"heatWithBoost"``.
 
         """
-        await self._send_command({"heater": {"control": {"heatingMode": mode}}})
+        mode_val = mode.value if isinstance(mode, HeatingMode) else str(mode)
+        await self._send_command({"heater": {"control": {"heatingMode": mode_val}}})
 
-    async def set_jet(self, jet: int, speed: str) -> None:
+    async def set_jet(self, jet: int, speed: str | JetSpeed) -> None:
         """Set the speed of a jet pump.
 
         Args:
         ----
             jet: The jet number (1-based).
-            speed: The speed value. Use JetSpeed enum values,
-                e.g. ``JetSpeed.HIGH_SPEED.value``.
+            speed: The speed value. Use JetSpeed enum values or string,
+                e.g. ``JetSpeed.HIGH_SPEED.value`` or ``"highSpeed"``.
 
         """
-        await self._send_command({"JET": {f"JET{jet}": {"control": speed}}})
+        speed_val = speed.value if isinstance(speed, JetSpeed) else str(speed)
+        await self._send_command({"JET": {f"JET{jet}": {"control": speed_val}}})
 
     async def set_light_color(
         self,
