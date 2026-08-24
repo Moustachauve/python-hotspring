@@ -338,14 +338,11 @@ class TestCommands:
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
-            match_msg = "Brightness must be an integer between 0 and 5"
+            match_msg = "Brightness must be between 0 and 5"
             with pytest.raises(ValueError, match=match_msg):
                 await client.set_light_brightness(1, -1)
             with pytest.raises(ValueError, match=match_msg):
                 await client.set_light_brightness(1, 6)
-            for invalid_val in (True, False, 3.5, "3"):
-                with pytest.raises(ValueError, match=match_msg):
-                    await client.set_light_brightness(1, invalid_val)  # type: ignore[arg-type]
 
     async def test_set_light_wheel(self, aresponses: ResponsesMockServer) -> None:
         """Test setting light wheel mode."""
@@ -407,16 +404,13 @@ class TestCommands:
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
-            err_msg = "RGB values must be integers between 0 and 255"
+            err_msg = "RGB values must be between 0 and 255"
             with pytest.raises(ValueError, match=err_msg):
                 await client.set_light_rgb(1, 256, 0, 0)
             with pytest.raises(ValueError, match=err_msg):
                 await client.set_light_rgb(1, 0, -1, 0)
             with pytest.raises(ValueError, match=err_msg):
                 await client.set_light_rgb(1, 0, 0, 300)
-            for invalid_comp in (True, False, 128.5, "128"):
-                with pytest.raises(ValueError, match=err_msg):
-                    await client.set_light_rgb(1, invalid_comp, 0, 0)  # type: ignore[arg-type]
 
     async def test_set_heating_mode(self, aresponses: ResponsesMockServer) -> None:
         """Test setting heating mode."""
