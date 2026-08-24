@@ -389,7 +389,16 @@ class TestFreshWaterIQ:
         fwiq = FreshWaterIQ.from_dict({})
         assert fwiq.conductivity == 0
         assert fwiq.ph == 0.0
-        assert fwiq.installed is True  # Flat format default
+        assert fwiq.installed is False
+
+    def test_from_flat_dict_with_existing_not_installed(self) -> None:
+        """Test flat parameters set installed=True on existing instance."""
+        existing = FreshWaterIQ(installed=False)
+        data: dict[str, object] = {"current_pH": 7.4, "current_chlorine": 2.5}
+        fwiq = FreshWaterIQ.from_dict(data, existing=existing)
+        assert fwiq.installed is True
+        assert fwiq.ph == 7.4
+        assert fwiq.chlorine == 2.5
 
 
 class TestEnergySaving:
@@ -455,6 +464,20 @@ class TestDiagnostics:
         diag = Diagnostics.from_dict({})
         assert diag.spa_failure_state == SpaFailureState.UNKNOWN
         assert diag.heater_power == "0"
+
+    def test_from_invalid_dict(self) -> None:
+        """Test parsing diagnostics with invalid/null nested objects."""
+        invalid_cases: list[dict[str, object]] = [
+            {"debugData": None},
+            {"debugData": "invalid"},
+            {"debugData": {"status": None}},
+            {"debugData": {"status": "invalid"}},
+            {"debugData": {"status": {}}},
+        ]
+        for invalid_data in invalid_cases:
+            diag = Diagnostics.from_dict(invalid_data)
+            assert diag.spa_failure_state == SpaFailureState.UNKNOWN
+            assert diag.heater_power == "0"
 
 
 class TestSpaTestData:
@@ -821,7 +844,7 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         updated = spa.update_from_dict(payload)
         assert updated == {"versions"}
         assert spa.versions.control_box == "9.9.9"
-        assert spa.versions.control_panel == ""
+        assert spa.versions.control_panel == "HT25.1102F0"
 
     def test_update_from_dict_energy_savings_partial(
         self, status_response: dict[str, object]
@@ -963,6 +986,27 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert spa.jets[0].on_seconds == initial_on_seconds
         assert spa.jets[1].jet_id == 2
         assert spa.jets[2].jet_id == 3
+
+    def test_partial_update_versions(self, status_response: dict[str, object]) -> None:
+        """Test updating product versions partially retains cached fields."""
+        spa = Spa(status_response)
+        assert spa.versions.control_box == "EG25.2100K0"
+        assert spa.versions.control_panel == "HT25.1102F0"
+
+        # Update only WiFiDongleVersion
+        partial_payload: dict[str, object] = {
+            "productVersions": {
+                "status": {
+                    "WiFiDongleVersion": "NEW.123",
+                }
+            }
+        }
+        updated = spa.update_from_dict(partial_payload)
+        assert updated == {"versions"}
+        assert spa.versions.wifi_dongle == "NEW.123"
+        # Omitted fields should retain their cached values
+        assert spa.versions.control_box == "EG25.2100K0"
+        assert spa.versions.control_panel == "HT25.1102F0"
 
     def test_merge_entities_union_and_append(self) -> None:
         """Test _merge_entities union (replace matching, retain, append new)."""
