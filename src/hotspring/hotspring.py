@@ -405,7 +405,11 @@ class HotSpring:
             ValueError: If brightness is not an integer between 0 and 5.
 
         """
-        if type(brightness) is not int or not 0 <= brightness <= 5:
+        if (
+            not isinstance(brightness, int)
+            or isinstance(brightness, bool)
+            or not 0 <= brightness <= 5
+        ):
             msg = f"Brightness must be an integer between 0 and 5, got {brightness}"
             raise ValueError(msg)
 
@@ -475,7 +479,11 @@ class HotSpring:
 
         """
         for component in (red, green, blue):
-            if type(component) is not int or not 0 <= component <= 255:
+            if (
+                not isinstance(component, int)
+                or isinstance(component, bool)
+                or not 0 <= component <= 255
+            ):
                 msg = (
                     f"RGB values must be integers between 0 and 255, "
                     f"got ({red}, {green}, {blue})"

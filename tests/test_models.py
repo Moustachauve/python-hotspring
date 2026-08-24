@@ -31,6 +31,7 @@ from hotspring.models import (
     SpaTestData,
     Versions,
     WaterCare,
+    _merge_entities,
     _parse_temperature,
 )
 
@@ -665,7 +666,7 @@ class TestSpaInfo:
         assert info.sna_ready is False
 
 
-class TestSpa:
+class TestSpa:  # pylint: disable=too-many-public-methods
     """Tests for the top-level Spa model."""
 
     def test_full_status_parsing(self, status_response: dict[str, object]) -> None:
@@ -965,8 +966,6 @@ class TestSpa:
 
     def test_merge_entities_union_and_append(self) -> None:
         """Test _merge_entities union (replace matching, retain, append new)."""
-        from hotspring.models import _merge_entities
-
         existing = [
             Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
             Jet(jet_id=2, speed=JetSpeed.OFF, is_enabled=True, on_seconds=200),
@@ -987,8 +986,6 @@ class TestSpa:
 
     def test_merge_entities_with_duplicate_incoming_keys(self) -> None:
         """Test _merge_entities deduplicates incoming keys cleanly."""
-        from hotspring.models import _merge_entities
-
         existing = [
             Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
         ]
@@ -1004,8 +1001,6 @@ class TestSpa:
 
     def test_merge_entities_empty_incoming(self) -> None:
         """Test _merge_entities with empty incoming list returns existing."""
-        from hotspring.models import _merge_entities
-
         existing = [
             Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
         ]
@@ -1014,8 +1009,6 @@ class TestSpa:
 
     def test_merge_entities_empty_existing(self) -> None:
         """Test _merge_entities with empty existing list deduplicates incoming."""
-        from hotspring.models import _merge_entities
-
         incoming = [
             Jet(jet_id=1, speed=JetSpeed.LOW_SPEED, is_enabled=True, on_seconds=50),
             Jet(jet_id=1, speed=JetSpeed.HIGH_SPEED, is_enabled=True, on_seconds=100),

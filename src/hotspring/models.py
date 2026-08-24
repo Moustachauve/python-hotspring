@@ -11,9 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, NamedTuple
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 from .const import (
     BrightnessLevel,
     HeatingMode,
@@ -25,6 +22,9 @@ from .const import (
     TemperatureUnit,
     resolve_spa_model,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class Spa:
