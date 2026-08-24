@@ -893,6 +893,45 @@ class TestSpa:
         assert spa.light_zones[2].zone_id == 3
         assert spa.light_zones[3].zone_id == 4
 
+    def test_partial_update_light_zone_switch_from_custom_to_preset(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test switching from custom RGB to a preset color resets rgb_state."""
+        spa = Spa(status_response)
+        # First set Zone 1 to custom RGB
+        spa.update_from_dict(
+            {
+                "lights": {
+                    "zone1": {
+                        "status": {
+                            "color": "custom",
+                            "RGBstate": "active",
+                            "cRed": 255,
+                            "cGreen": 0,
+                            "cBlue": 0,
+                        }
+                    }
+                }
+            }
+        )
+        assert spa.light_zones[0].color == LightColor.CUSTOM
+        assert spa.light_zones[0].rgb_state == "active"
+
+        # Now send a partial update setting color to GREEN without RGBstate
+        spa.update_from_dict(
+            {
+                "lights": {
+                    "zone1": {
+                        "status": {
+                            "color": "green",
+                        }
+                    }
+                }
+            }
+        )
+        assert spa.light_zones[0].color == LightColor.GREEN
+        assert spa.light_zones[0].rgb_state == "inactive"
+
     def test_partial_update_single_jet(
         self, status_response: dict[str, object]
     ) -> None:

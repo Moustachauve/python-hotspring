@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
@@ -58,21 +58,21 @@ class Spa:
             data: The API response dict from a GET /status call.
 
         """
-        self.heater = Heater.from_dict({})
+        self.heater = Heater()
         self.jets = []
-        self.blower = Blower.from_dict({})
+        self.blower = Blower()
         self.light_zones = []
-        self.logo_light = LogoLight.from_dict({})
-        self.clean_cycle = CleanCycle.from_dict({})
-        self.spa_lock = SpaLock.from_dict({})
-        self.water_care = WaterCare.from_dict({})
-        self.freshwater_iq = FreshWaterIQ.from_dict({})
-        self.test_metrics = SpaTestData.from_dict({})
+        self.logo_light = LogoLight()
+        self.clean_cycle = CleanCycle()
+        self.spa_lock = SpaLock()
+        self.water_care = WaterCare()
+        self.freshwater_iq = FreshWaterIQ()
+        self.test_metrics = SpaTestData()
         self.energy_savings = []
-        self.versions = Versions.from_dict({})
-        self.info = SpaInfo.from_dict({})
-        self.connection_status = ConnectionStatus.from_dict({})
-        self.diagnostics = Diagnostics.from_dict({})
+        self.versions = Versions()
+        self.info = SpaInfo()
+        self.connection_status = ConnectionStatus()
+        self.diagnostics = Diagnostics()
 
         if data:
             self.update_from_dict(data)
@@ -93,7 +93,12 @@ class Spa:
 
         for section in _SECTION_PARSERS:
             if section.json_key in data and isinstance(data[section.json_key], dict):
-                setattr(self, section.attr_name, section.parser(data[section.json_key]))
+                current = getattr(self, section.attr_name, None)
+                setattr(
+                    self,
+                    section.attr_name,
+                    section.parser(data[section.json_key], existing=current),
+                )
                 updated.add(section.attr_name)
 
         if "JET" in data and isinstance(data["JET"], dict):
@@ -207,17 +212,17 @@ class SpaInfo:
     Populated from the /startup and /spamodel endpoints.
     """
 
-    hostname: str
-    root_topic: str
-    sna_ready: bool
-    brand: SpaBrand
-    brand_name: str
-    collection: str
-    model_name: str
-    brand_id: str
-    collection_id: str
-    model_id: str
-    volume: int
+    hostname: str = ""
+    root_topic: str = ""
+    sna_ready: bool = False
+    brand: SpaBrand = SpaBrand.UNKNOWN
+    brand_name: str = SpaBrand.UNKNOWN.value
+    collection: str = "Unknown"
+    model_name: str = "Unknown"
+    brand_id: str = ""
+    collection_id: str = ""
+    model_id: str = ""
+    volume: int = 0
 
     @property
     def collection_type(self) -> str:
@@ -301,44 +306,62 @@ class SpaInfo:
 class Heater:  # pylint: disable=too-many-instance-attributes
     """Heater status and configuration."""
 
-    is_on: bool
-    heater_lock: bool
-    heatpump_installed: bool
-    heating_mode: HeatingMode
-    heater_current: float
-    heater_on_seconds: int
-    set_temperature: float | None
-    current_temperature: float | None
-    temperature_unit: TemperatureUnit
+    is_on: bool = False
+    heater_lock: bool = False
+    heatpump_installed: bool = False
+    heating_mode: HeatingMode = HeatingMode.UNKNOWN
+    heater_current: float = 0.0
+    heater_on_seconds: int = 0
+    set_temperature: float | None = None
+    current_temperature: float | None = None
+    temperature_unit: TemperatureUnit = TemperatureUnit.UNKNOWN
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> Heater:
+    def from_dict(data: dict[str, object], existing: Heater | None = None) -> Heater:
         """Create a Heater from API response data.
 
         Args:
         ----
             data: The ``heater`` dict from the /status response.
+            existing: Optional existing Heater instance to preserve cached fields.
 
         Returns:
         -------
             A Heater instance.
 
         """
-        status = data.get("status", {})
-        return Heater(
-            is_on=status.get("heater", "off") != "off",
-            heater_lock=status.get("heaterLock", "off") != "off",
-            heatpump_installed=status.get("heatpumpInstalled", "notinstalled")
-            != "notinstalled",
-            heating_mode=HeatingMode.build(status.get("heatingMode")),
-            heater_current=int(status.get("heaterCurrent", 0)) / 2560.0,
-            heater_on_seconds=int(status.get("heaterHours", 0)) // 256,
-            set_temperature=_parse_temperature(status.get("setWaterTemperature")),
-            current_temperature=_parse_temperature(
-                status.get("currentWaterTemperature")
-            ),
-            temperature_unit=TemperatureUnit.build(status.get("temperatureUnit")),
-        )
+        kwargs: dict[str, object] = {}
+        status = data.get("status")
+        if isinstance(status, dict):
+            if "heater" in status:
+                kwargs["is_on"] = status.get("heater", "off") != "off"
+            if "heaterLock" in status:
+                kwargs["heater_lock"] = status.get("heaterLock", "off") != "off"
+            if "heatpumpInstalled" in status:
+                kwargs["heatpump_installed"] = (
+                    status.get("heatpumpInstalled", "notinstalled") != "notinstalled"
+                )
+            if "heatingMode" in status:
+                kwargs["heating_mode"] = HeatingMode.build(status.get("heatingMode"))
+            if "heaterCurrent" in status:
+                kwargs["heater_current"] = int(status.get("heaterCurrent", 0)) / 2560.0
+            if "heaterHours" in status:
+                kwargs["heater_on_seconds"] = int(status.get("heaterHours", 0)) // 256
+            if "setWaterTemperature" in status:
+                kwargs["set_temperature"] = _parse_temperature(
+                    status.get("setWaterTemperature")
+                )
+            if "currentWaterTemperature" in status:
+                kwargs["current_temperature"] = _parse_temperature(
+                    status.get("currentWaterTemperature")
+                )
+            if "temperatureUnit" in status:
+                kwargs["temperature_unit"] = TemperatureUnit.build(
+                    status.get("temperatureUnit")
+                )
+
+        base = existing or Heater()
+        return replace(base, **kwargs)
 
 
 @dataclass
@@ -346,9 +369,9 @@ class Jet:
     """Status and configuration for a single jet pump."""
 
     jet_id: int
-    speed: JetSpeed
-    is_enabled: bool
-    on_seconds: int
+    speed: JetSpeed = JetSpeed.OFF
+    is_enabled: bool = True
+    on_seconds: int = 0
 
     @staticmethod
     def from_dict(
@@ -369,29 +392,21 @@ class Jet:
             A Jet instance.
 
         """
-        # Start with cached values if present, otherwise safe defaults
-        is_enabled = existing.is_enabled if existing else True
-        speed = existing.speed if existing else JetSpeed.OFF
-        on_seconds = existing.on_seconds if existing else 0
-
+        kwargs: dict[str, object] = {}
         config = data.get("config")
         if isinstance(config, dict):
-            is_enabled = config.get(f"JET{jet_id}", "enable") != "disable"
+            kwargs["is_enabled"] = config.get(f"JET{jet_id}", "enable") != "disable"
 
         status = data.get("status")
         if isinstance(status, dict):
             if "speed" in status:
-                speed = JetSpeed.build(status.get("speed"))
+                kwargs["speed"] = JetSpeed.build(status.get("speed"))
             on_sec_key = f"jet_{jet_id}_ON_sec"
             if on_sec_key in status:
-                on_seconds = int(status.get(on_sec_key, 0)) // 256
+                kwargs["on_seconds"] = int(status.get(on_sec_key, 0)) // 256
 
-        return Jet(
-            jet_id=jet_id,
-            speed=speed,
-            is_enabled=is_enabled,
-            on_seconds=on_seconds,
-        )
+        base = existing or Jet(jet_id=jet_id)
+        return replace(base, **kwargs)
 
     @staticmethod
     def list_from_dict(
@@ -428,28 +443,34 @@ class Jet:
 class Blower:
     """Blower status and configuration."""
 
-    is_enabled: bool
-    is_on: bool
+    is_enabled: bool = False
+    is_on: bool = False
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> Blower:
+    def from_dict(data: dict[str, object], existing: Blower | None = None) -> Blower:
         """Create a Blower from API response data.
 
         Args:
         ----
             data: The ``blower`` dict from the /status response.
+            existing: Optional existing Blower instance to preserve cached fields.
 
         Returns:
         -------
             A Blower instance.
 
         """
-        config = data.get("config", {})
-        status = data.get("status", {})
-        return Blower(
-            is_enabled=config.get("blower", "disable") != "disable",
-            is_on=status.get("blower", "off") not in ("off", "disable"),
-        )
+        kwargs: dict[str, object] = {}
+        config = data.get("config")
+        if isinstance(config, dict) and "blower" in config:
+            kwargs["is_enabled"] = config.get("blower", "disable") != "disable"
+
+        status = data.get("status")
+        if isinstance(status, dict) and "blower" in status:
+            kwargs["is_on"] = status.get("blower", "off") not in ("off", "disable")
+
+        base = existing or Blower()
+        return replace(base, **kwargs)
 
 
 @dataclass
@@ -457,12 +478,12 @@ class LightZone:
     """Status and configuration for a single light zone."""
 
     zone_id: int
-    is_enabled: bool
-    is_on: bool
-    color: LightColor
-    light_wheel: LightWheelMode
-    intensity: int
-    loop_speed: int
+    is_enabled: bool = False
+    is_on: bool = False
+    color: LightColor = LightColor.UNKNOWN
+    light_wheel: LightWheelMode = LightWheelMode.OFF
+    intensity: int = 0
+    loop_speed: int = 0
     c_red: int = 0
     c_green: int = 0
     c_blue: int = 0
@@ -487,59 +508,42 @@ class LightZone:
             A LightZone instance.
 
         """
+        kwargs: dict[str, object] = {}
         config = data.get("config")
-        status = data.get("status")
-
-        # Start with cached values if present, otherwise safe defaults
-        is_enabled = existing.is_enabled if existing else False
-        color = existing.color if existing else LightColor.UNKNOWN
-        light_wheel = existing.light_wheel if existing else LightWheelMode.OFF
-        intensity = existing.intensity if existing else 0
-        is_on = existing.is_on if existing else False
-        loop_speed = existing.loop_speed if existing else 0
-        c_red = existing.c_red if existing else 0
-        c_green = existing.c_green if existing else 0
-        c_blue = existing.c_blue if existing else 0
-        rgb_state = existing.rgb_state if existing else "inactive"
-
         if isinstance(config, dict):
-            is_enabled = config.get(f"zone_{zone_id}", "disable") != "disable"
+            kwargs["is_enabled"] = config.get(f"zone_{zone_id}", "disable") != "disable"
 
+        status = data.get("status")
         if isinstance(status, dict):
             if "color" in status:
-                color = LightColor.build(status.get("color"))
+                color_val = LightColor.build(status.get("color"))
+                kwargs["color"] = color_val
+                if "RGBstate" not in status and color_val != LightColor.CUSTOM:
+                    kwargs["rgb_state"] = "inactive"
             if "lightWheel" in status:
-                light_wheel = LightWheelMode.build(status.get("lightWheel"))
+                kwargs["light_wheel"] = LightWheelMode.build(status.get("lightWheel"))
             if "Intensity" in status:
                 intensity = int(status.get("Intensity", 0))
-                is_on = intensity > 0
+                kwargs["intensity"] = intensity
+                kwargs["is_on"] = intensity > 0
             if "loopSpeed" in status:
-                loop_speed = int(status.get("loopSpeed", 0))
+                kwargs["loop_speed"] = int(status.get("loopSpeed", 0))
             if "cRed" in status:
-                c_red = int(status.get("cRed", 0))
+                kwargs["c_red"] = int(status.get("cRed", 0))
             if "cGreen" in status:
-                c_green = int(status.get("cGreen", 0))
+                kwargs["c_green"] = int(status.get("cGreen", 0))
             if "cBlue" in status:
-                c_blue = int(status.get("cBlue", 0))
+                kwargs["c_blue"] = int(status.get("cBlue", 0))
             if "RGBstate" in status:
-                rgb_state = str(status.get("RGBstate", "inactive")).lower()
+                kwargs["rgb_state"] = str(status.get("RGBstate", "inactive")).lower()
 
-        if rgb_state == "active" and (c_red, c_green, c_blue) != (0, 0, 0):
-            color = LightColor.CUSTOM
-
-        return LightZone(
-            zone_id=zone_id,
-            is_enabled=is_enabled,
-            is_on=is_on,
-            color=color,
-            light_wheel=light_wheel,
-            intensity=intensity,
-            loop_speed=loop_speed,
-            c_red=c_red,
-            c_green=c_green,
-            c_blue=c_blue,
-            rgb_state=rgb_state,
-        )
+        base = existing or LightZone(zone_id=zone_id)
+        zone = replace(base, **kwargs)
+        if zone.rgb_state == "active" and (
+            (zone.c_red, zone.c_green, zone.c_blue) != (0, 0, 0)
+        ):
+            zone.color = LightColor.CUSTOM
+        return zone
 
     @staticmethod
     def list_from_dict(
@@ -579,133 +583,169 @@ class LightZone:
 class LogoLight:
     """Logo light status."""
 
-    brightness: BrightnessLevel
+    brightness: BrightnessLevel = BrightnessLevel.UNKNOWN
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> LogoLight:
+    def from_dict(
+        data: dict[str, object], existing: LogoLight | None = None
+    ) -> LogoLight:
         """Create a LogoLight from API response data.
 
         Args:
         ----
             data: The ``logoLight`` dict from the /status response.
+            existing: Optional existing LogoLight instance to preserve cached fields.
 
         Returns:
         -------
             A LogoLight instance.
 
         """
-        status = data.get("status", {})
-        return LogoLight(
-            brightness=BrightnessLevel.build(status.get("brightness")),
-        )
+        kwargs: dict[str, object] = {}
+        status = data.get("status")
+        if isinstance(status, dict) and "brightness" in status:
+            kwargs["brightness"] = BrightnessLevel.build(status.get("brightness"))
+
+        base = existing or LogoLight()
+        return replace(base, **kwargs)
 
 
 @dataclass
 class CleanCycle:
     """Clean cycle status and configuration."""
 
-    is_enabled: bool
-    vanishing_act: bool
+    is_enabled: bool = False
+    vanishing_act: bool = False
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> CleanCycle:
+    def from_dict(
+        data: dict[str, object], existing: CleanCycle | None = None
+    ) -> CleanCycle:
         """Create a CleanCycle from API response data.
 
         Args:
         ----
             data: The ``cleanCycle`` dict from the /status response.
+            existing: Optional existing CleanCycle instance to preserve cached fields.
 
         Returns:
         -------
             A CleanCycle instance.
 
         """
-        status = data.get("status", {})
-        return CleanCycle(
-            is_enabled=status.get("cleanCycle", "disable") == "enable",
-            vanishing_act=status.get("vanishingAct", "off") != "off",
-        )
+        kwargs: dict[str, object] = {}
+        status = data.get("status")
+        if isinstance(status, dict):
+            if "cleanCycle" in status:
+                kwargs["is_enabled"] = status.get("cleanCycle", "disable") == "enable"
+            if "vanishingAct" in status:
+                kwargs["vanishing_act"] = status.get("vanishingAct", "off") != "off"
+
+        base = existing or CleanCycle()
+        return replace(base, **kwargs)
 
 
 @dataclass
 class SpaLock:
     """Spa lock status."""
 
-    is_locked: bool
+    is_locked: bool = False
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> SpaLock:
+    def from_dict(data: dict[str, object], existing: SpaLock | None = None) -> SpaLock:
         """Create a SpaLock from API response data.
 
         Args:
         ----
             data: The ``spaLock`` dict from the /status response.
+            existing: Optional existing SpaLock instance to preserve cached fields.
 
         Returns:
         -------
             A SpaLock instance.
 
         """
-        status = data.get("status", {})
-        return SpaLock(
-            is_locked=status.get("spaLock", "off") != "off",
-        )
+        kwargs: dict[str, object] = {}
+        status = data.get("status")
+        if isinstance(status, dict) and "spaLock" in status:
+            kwargs["is_locked"] = status.get("spaLock", "off") != "off"
+
+        base = existing or SpaLock()
+        return replace(base, **kwargs)
 
 
 @dataclass
 class WaterCare:  # pylint: disable=too-many-instance-attributes
     """Water care / salt system status."""
 
-    cartridge_installed: bool
-    ten_day_timer: int
-    one_twenty_day_timer: int
-    level: int
-    system_enabled: bool
-    ace_mode: str
-    boost_active: bool
-    salt_value: int
+    cartridge_installed: bool = False
+    ten_day_timer: int = 0
+    one_twenty_day_timer: int = 0
+    level: int = 0
+    system_enabled: bool = False
+    ace_mode: str = "inactive"
+    boost_active: bool = False
+    salt_value: int = 0
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> WaterCare:
+    def from_dict(
+        data: dict[str, object], existing: WaterCare | None = None
+    ) -> WaterCare:
         """Create a WaterCare from API response data.
 
         Args:
         ----
             data: The ``waterCare`` dict from the /status response.
+            existing: Optional existing WaterCare instance to preserve cached fields.
 
         Returns:
         -------
             A WaterCare instance.
 
         """
-        status = data.get("status", {})
-        return WaterCare(
-            cartridge_installed=status.get("cartridgeInstalled", "notinstalled")
-            != "notinstalled",
-            ten_day_timer=int(status.get("10DayTimer", 0)),
-            one_twenty_day_timer=int(status.get("120DayTimer", 0)),
-            level=int(status.get("level", 0)),
-            system_enabled=status.get("SystemEnable", "disable") == "enable",
-            ace_mode=str(status.get("AceMode", "inactive")),
-            boost_active=status.get("boost", "inactive") != "inactive",
-            salt_value=int(status.get("saltValue", 0)),
-        )
+        kwargs: dict[str, object] = {}
+        status = data.get("status")
+        if isinstance(status, dict):
+            if "cartridgeInstalled" in status:
+                kwargs["cartridge_installed"] = (
+                    status.get("cartridgeInstalled", "notinstalled") != "notinstalled"
+                )
+            if "10DayTimer" in status:
+                kwargs["ten_day_timer"] = int(status.get("10DayTimer", 0))
+            if "120DayTimer" in status:
+                kwargs["one_twenty_day_timer"] = int(status.get("120DayTimer", 0))
+            if "level" in status:
+                kwargs["level"] = int(status.get("level", 0))
+            if "SystemEnable" in status:
+                kwargs["system_enabled"] = (
+                    status.get("SystemEnable", "disable") == "enable"
+                )
+            if "AceMode" in status:
+                kwargs["ace_mode"] = str(status.get("AceMode", "inactive"))
+            if "boost" in status:
+                kwargs["boost_active"] = status.get("boost", "inactive") != "inactive"
+            if "saltValue" in status:
+                kwargs["salt_value"] = int(status.get("saltValue", 0))
+
+        base = existing or WaterCare()
+        return replace(base, **kwargs)
 
 
 @dataclass
 class FreshWaterIQ:
     """FreshWater IQ water quality sensor data."""
 
-    conductivity: int
-    orp: int
-    chlorine: float
-    ph: float
-    sensor_life_percentage: float
-
-    installed: bool
+    conductivity: int = 0
+    orp: int = 0
+    chlorine: float = 0.0
+    ph: float = 0.0
+    sensor_life_percentage: float = 0.0
+    installed: bool = False
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> FreshWaterIQ:
+    def from_dict(
+        data: dict[str, object], existing: FreshWaterIQ | None = None
+    ) -> FreshWaterIQ:
         """Create a FreshWaterIQ from API response data.
 
         Handles two response formats:
@@ -715,6 +755,7 @@ class FreshWaterIQ:
         Args:
         ----
             data: Data from either source.
+            existing: Optional existing FreshWaterIQ instance to preserve cached fields.
 
         Returns:
         -------
@@ -722,8 +763,16 @@ class FreshWaterIQ:
 
         """
         # Handle the nested /getFWIQData format
-        fwiq = data.get("waterCare", {}).get("status", {}).get("FWIQstatus", {})
-        if fwiq:
+        water_care = data.get("waterCare")
+        fwiq = None
+        if isinstance(water_care, dict):
+            status = water_care.get("status")
+            if isinstance(status, dict):
+                fwiq_status = status.get("FWIQstatus")
+                if isinstance(fwiq_status, dict):
+                    fwiq = fwiq_status
+
+        if fwiq is not None:
             return FreshWaterIQ(
                 conductivity=int(fwiq.get("Conductivity", 0)),
                 orp=int(fwiq.get("ORP", 0)),
@@ -734,16 +783,24 @@ class FreshWaterIQ:
             )
 
         # Handle the flat /status FWIQ_Parameters format
-        return FreshWaterIQ(
-            conductivity=int(data.get("current_Current_CompConductivity", 0)),
-            orp=int(data.get("current_ORP", 0)),
-            chlorine=float(data.get("current_chlorine", 0.0)),
-            ph=float(data.get("current_pH", 0.0)),
-            sensor_life_percentage=float(
+        kwargs: dict[str, object] = {}
+        if "current_Current_CompConductivity" in data:
+            kwargs["conductivity"] = int(
+                data.get("current_Current_CompConductivity", 0)
+            )
+        if "current_ORP" in data:
+            kwargs["orp"] = int(data.get("current_ORP", 0))
+        if "current_chlorine" in data:
+            kwargs["chlorine"] = float(data.get("current_chlorine", 0.0))
+        if "current_pH" in data:
+            kwargs["ph"] = float(data.get("current_pH", 0.0))
+        if "current_SensorLife_Percentage" in data:
+            kwargs["sensor_life_percentage"] = float(
                 data.get("current_SensorLife_Percentage", 0.0)
-            ),
-            installed=True,  # Assume installed if using flat format
-        )
+            )
+
+        base = existing or FreshWaterIQ(installed=True)
+        return replace(base, **kwargs)
 
 
 @dataclass
@@ -751,10 +808,10 @@ class EnergySaving:
     """Energy saving schedule configuration."""
 
     schedule_id: int
-    mode: int
-    start_hour: int
-    start_minute: int
-    duration: int
+    mode: int = 0
+    start_hour: int = 0
+    start_minute: int = 0
+    duration: int = 0
 
     @staticmethod
     def from_dict(
@@ -775,29 +832,20 @@ class EnergySaving:
             An EnergySaving instance.
 
         """
-        mode = existing.mode if existing else 0
-        start_hour = existing.start_hour if existing else 0
-        start_minute = existing.start_minute if existing else 0
-        duration = existing.duration if existing else 0
-
+        kwargs: dict[str, object] = {}
         status = data.get("status")
         if isinstance(status, dict):
             if "mode" in status:
-                mode = int(status.get("mode", 0))
+                kwargs["mode"] = int(status.get("mode", 0))
             if "startHour" in status:
-                start_hour = int(status.get("startHour", 0))
+                kwargs["start_hour"] = int(status.get("startHour", 0))
             if "startMinute" in status:
-                start_minute = int(status.get("startMinute", 0))
+                kwargs["start_minute"] = int(status.get("startMinute", 0))
             if "duration" in status:
-                duration = int(status.get("duration", 0))
+                kwargs["duration"] = int(status.get("duration", 0))
 
-        return EnergySaving(
-            schedule_id=schedule_id,
-            mode=mode,
-            start_hour=start_hour,
-            start_minute=start_minute,
-            duration=duration,
-        )
+        base = existing or EnergySaving(schedule_id=schedule_id)
+        return replace(base, **kwargs)
 
     @staticmethod
     def list_from_dict(
@@ -837,50 +885,60 @@ class EnergySaving:
 class Versions:  # pylint: disable=too-many-instance-attributes
     """Firmware versions for all spa sub-components."""
 
-    control_box: str
-    control_panel: str
-    fwss: str
-    fwiq: str
-    btxr: str
-    cool_zone: str
-    wifi_dongle: str
-    amp: str
-    dosing: str
-    logolight: str
+    control_box: str = ""
+    control_panel: str = ""
+    fwss: str = ""
+    fwiq: str = ""
+    btxr: str = ""
+    cool_zone: str = ""
+    wifi_dongle: str = ""
+    amp: str = ""
+    dosing: str = ""
+    logolight: str = ""
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> Versions:
+    def from_dict(
+        data: dict[str, object], existing: Versions | None = None
+    ) -> Versions:
         """Create a Versions from API response data.
 
         Args:
         ----
             data: The ``productVersions.status`` dict from /status
                 or from GET /versions.
+            existing: Optional existing Versions instance to preserve cached fields.
 
         Returns:
         -------
             A Versions instance.
 
         """
-        return Versions(
-            control_box=data.get("ControlBoxFirmwareVersion", ""),
-            control_panel=data.get("ControlPanelFirmwareVersion", ""),
-            fwss=data.get("FWSSFirmwareVersion", ""),
-            fwiq=data.get("FWIQFirmwareVersion", ""),
-            btxr=data.get("BTXRFirmwareVersion", ""),
-            cool_zone=data.get("CoolZoneFirmwareVersion", ""),
-            wifi_dongle=data.get("WiFiDongleVersion", ""),
-            amp=data.get("AMPFirmwareVersion", ""),
-            dosing=data.get("DosingFirmwareVersion", ""),
-            logolight=data.get("LogolightFirmwareVersion", ""),
-        )
+        key_map = {
+            "ControlBoxFirmwareVersion": "control_box",
+            "ControlPanelFirmwareVersion": "control_panel",
+            "FWSSFirmwareVersion": "fwss",
+            "FWIQFirmwareVersion": "fwiq",
+            "BTXRFirmwareVersion": "btxr",
+            "CoolZoneFirmwareVersion": "cool_zone",
+            "WiFiDongleVersion": "wifi_dongle",
+            "AMPFirmwareVersion": "amp",
+            "DosingFirmwareVersion": "dosing",
+            "LogolightFirmwareVersion": "logolight",
+        }
+        kwargs: dict[str, object] = {}
+        for json_key, attr in key_map.items():
+            if json_key in data:
+                kwargs[attr] = str(data[json_key])
+
+        base = existing or Versions()
+        return replace(base, **kwargs)
 
 
 @dataclass
 class ConnectionStatus:
     """Connection status between the HNA, SNA, and cloud."""
 
-    spa_connected: bool
+    spa_connected: bool = False
 
     @staticmethod
     def from_dict(data: dict[str, object]) -> ConnectionStatus:
@@ -900,48 +958,63 @@ class ConnectionStatus:
         """
         raw = data.get("spaConnectStatus", "false")
         connected = str(raw).lower() in ("true", "1")
-        return ConnectionStatus(
-            spa_connected=connected,
-        )
+        return ConnectionStatus(spa_connected=connected)
 
 
 @dataclass
 class SpaTestData:
     """Test data metrics from the spa, including raw current readings."""
 
-    heater_test_status: str
-    temp_offset: float
-    vsense_cal: float
-    jet1_jet2_blower_current: float
-    small_loads_current: float
-    heater_current: float
-    jet3_current: float
+    heater_test_status: str = "off"
+    temp_offset: float = 0.0
+    vsense_cal: float = 0.0
+    jet1_jet2_blower_current: float = 0.0
+    small_loads_current: float = 0.0
+    heater_current: float = 0.0
+    jet3_current: float = 0.0
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> SpaTestData:
+    def from_dict(
+        data: dict[str, object], existing: SpaTestData | None = None
+    ) -> SpaTestData:
         """Create a SpaTestData from API response data.
 
         Args:
         ----
             data: The ``test_data`` dict from the /status response.
+            existing: Optional existing SpaTestData instance to preserve cached fields.
 
         Returns:
         -------
             A SpaTestData instance.
 
         """
-        status = data.get("status", {})
-        return SpaTestData(
-            heater_test_status=str(status.get("heaterTestStatus", "off")),
-            temp_offset=float(status.get("tempOffset", 0.0)),
-            vsense_cal=float(status.get("VsenseCal", 0.0)),
-            jet1_jet2_blower_current=(
-                int(status.get("jet1+jet2+blowerCurrent", 0)) / 2560.0
-            ),
-            small_loads_current=int(status.get("smallLoadsCurrent", 0)) / 2560.0,
-            heater_current=int(status.get("heaterCurrent", 0)) / 2560.0,
-            jet3_current=int(status.get("jet3Current", 0)) / 2560.0,
-        )
+        kwargs: dict[str, object] = {}
+        status = data.get("status")
+        if isinstance(status, dict):
+            if "heaterTestStatus" in status:
+                kwargs["heater_test_status"] = str(
+                    status.get("heaterTestStatus", "off")
+                )
+            if "tempOffset" in status:
+                kwargs["temp_offset"] = float(status.get("tempOffset", 0.0))
+            if "VsenseCal" in status:
+                kwargs["vsense_cal"] = float(status.get("VsenseCal", 0.0))
+            if "jet1+jet2+blowerCurrent" in status:
+                kwargs["jet1_jet2_blower_current"] = (
+                    int(status.get("jet1+jet2+blowerCurrent", 0)) / 2560.0
+                )
+            if "smallLoadsCurrent" in status:
+                kwargs["small_loads_current"] = (
+                    int(status.get("smallLoadsCurrent", 0)) / 2560.0
+                )
+            if "heaterCurrent" in status:
+                kwargs["heater_current"] = int(status.get("heaterCurrent", 0)) / 2560.0
+            if "jet3Current" in status:
+                kwargs["jet3_current"] = int(status.get("jet3Current", 0)) / 2560.0
+
+        base = existing or SpaTestData()
+        return replace(base, **kwargs)
 
 
 @dataclass
@@ -953,18 +1026,18 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
     Values may be ``0`` if sensors are not installed.
     """
 
-    spa_failure_state: SpaFailureState
-    heater_error: str
-    power_frequency: str
-    pressure_switch_status: str
-    l1_n_volts: float
-    l2_n_volts: float
-    heater_volts: float
-    jet3_volts: float
-    jet1_jet2_blower_power: str
-    small_loads_power: str
-    heater_power: str
-    jet3_power: str
+    spa_failure_state: SpaFailureState = SpaFailureState.UNKNOWN
+    heater_error: str = "0"
+    power_frequency: str = "0"
+    pressure_switch_status: str = "0"
+    l1_n_volts: float = 0.0
+    l2_n_volts: float = 0.0
+    heater_volts: float = 0.0
+    jet3_volts: float = 0.0
+    jet1_jet2_blower_power: str = "0"
+    small_loads_power: str = "0"
+    heater_power: str = "0"
+    jet3_power: str = "0"
 
     @staticmethod
     def from_dict(data: dict[str, object]) -> Diagnostics:
@@ -981,23 +1054,37 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
 
         """
         debug = data.get("debugData", {}).get("status", {})
-        return Diagnostics(
-            spa_failure_state=SpaFailureState.build(debug.get("spaFailureState")),
-            heater_error=debug.get("heaterError", "0"),
-            power_frequency=debug.get("powerFrequency", "0"),
-            pressure_switch_status=debug.get("pressureSwitchStatus", "0"),
-            # NOTE: The /32 scaling for volts is likely incorrect for all models or
-            # specific configurations, as real-world readings (e.g., 56V on L2)
-            # do not match expectations. This needs further investigation.
-            l1_n_volts=int(debug.get("L1_N_Volts") or 0) / 32.0,
-            l2_n_volts=int(debug.get("L2_N_Volts") or 0) / 32.0,
-            heater_volts=int(debug.get("Heater_Volts") or 0) / 32.0,
-            jet3_volts=int(debug.get("jet3_Volts") or 0) / 32.0,
-            jet1_jet2_blower_power=debug.get("jet1_jet2_blowerPower", "0"),
-            small_loads_power=debug.get("smallLoadsPower", "0"),
-            heater_power=debug.get("heaterPower", "0"),
-            jet3_power=debug.get("jet3Power", "0"),
-        )
+        if not isinstance(debug, dict) or not debug:
+            return Diagnostics()
+
+        volt_keys = {
+            "L1_N_Volts": "l1_n_volts",
+            "L2_N_Volts": "l2_n_volts",
+            "Heater_Volts": "heater_volts",
+            "jet3_Volts": "jet3_volts",
+        }
+        str_keys = {
+            "heaterError": "heater_error",
+            "powerFrequency": "power_frequency",
+            "pressureSwitchStatus": "pressure_switch_status",
+            "jet1_jet2_blowerPower": "jet1_jet2_blower_power",
+            "smallLoadsPower": "small_loads_power",
+            "heaterPower": "heater_power",
+            "jet3Power": "jet3_power",
+        }
+        kwargs: dict[str, object] = {}
+        if "spaFailureState" in debug:
+            kwargs["spa_failure_state"] = SpaFailureState.build(
+                debug.get("spaFailureState")
+            )
+        for json_key, attr in str_keys.items():
+            if json_key in debug:
+                kwargs[attr] = str(debug[json_key])
+        for json_key, attr in volt_keys.items():
+            if json_key in debug:
+                kwargs[attr] = int(debug.get(json_key) or 0) / 32.0
+
+        return replace(Diagnostics(), **kwargs)
 
 
 def _merge_entities[T, K](
@@ -1018,7 +1105,7 @@ class _SectionParser(NamedTuple):
 
     json_key: str
     attr_name: str
-    parser: Callable[[dict[str, object]], object]
+    parser: Callable[..., object]
 
 
 _SECTION_PARSERS: tuple[_SectionParser, ...] = (
