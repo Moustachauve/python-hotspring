@@ -544,7 +544,7 @@ class TestCommands:
                 await client.set_temperature(102)
 
     async def test_command_server_error(self, aresponses: ResponsesMockServer) -> None:
-        """Test command wraps server errors in HotSpringCommandError."""
+        """Test command failure wraps in HotSpringCommandError and preserves state."""
         _add_update_mocks(aresponses)
         aresponses.add(
             "192.168.1.100",
@@ -555,8 +555,11 @@ class TestCommands:
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
+            assert client.spa is not None
+            initial_temp = client.spa.heater.set_temperature
             with pytest.raises(HotSpringCommandError, match="Command failed"):
                 await client.set_temperature(102)
+            assert client.spa.heater.set_temperature == initial_temp
 
 
 class TestConnection:
