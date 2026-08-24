@@ -777,6 +777,7 @@ class TestSpa:
         assert updated == {"light_zones"}
 
         # Zone 1 should be updated to custom Cyan with intensity 4
+        # while preserving is_enabled
         assert len(spa.light_zones) == 4
         assert spa.light_zones[0].intensity == 4
         assert spa.light_zones[0].color == LightColor.CUSTOM
@@ -784,6 +785,7 @@ class TestSpa:
         assert spa.light_zones[0].c_green == 255
         assert spa.light_zones[0].c_blue == 255
         assert spa.light_zones[0].rgb_state == "active"
+        assert spa.light_zones[0].is_enabled is True
 
         # Other zones should be preserved intact
         assert spa.light_zones[1].zone_id == 2
@@ -793,12 +795,15 @@ class TestSpa:
     def test_partial_update_single_jet(
         self, status_response: dict[str, object]
     ) -> None:
-        """Test that updating a single jet preserves other jets."""
+        """Test updating a single jet preserves other jets and omitted fields."""
         spa = Spa(status_response)
         assert len(spa.jets) == 3
         assert spa.jets[0].speed == JetSpeed.HIGH_SPEED
+        initial_on_seconds = spa.jets[0].on_seconds
+        assert initial_on_seconds > 0
 
         # Simulate a command response updating JET1 to off
+        # (omitting config and on_seconds)
         partial_payload: dict[str, object] = {
             "JET": {
                 "JET1": {
@@ -813,8 +818,32 @@ class TestSpa:
 
         assert len(spa.jets) == 3
         assert spa.jets[0].speed == JetSpeed.OFF
+        assert spa.jets[0].is_enabled is True
+        assert spa.jets[0].on_seconds == initial_on_seconds
         assert spa.jets[1].jet_id == 2
         assert spa.jets[2].jet_id == 3
+
+    def test_merge_entities_union_and_append(self) -> None:
+        """Test _merge_entities union (replace matching, retain, append new)."""
+        from hotspring.models import _merge_entities
+
+        existing = [
+            Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
+            Jet(jet_id=2, speed=JetSpeed.OFF, is_enabled=True, on_seconds=200),
+        ]
+        incoming = [
+            Jet(jet_id=2, speed=JetSpeed.HIGH_SPEED, is_enabled=True, on_seconds=250),
+            Jet(jet_id=3, speed=JetSpeed.LOW_SPEED, is_enabled=True, on_seconds=50),
+        ]
+
+        result = _merge_entities(existing, incoming, lambda j: j.jet_id)
+        assert len(result) == 3
+        assert result[0].jet_id == 1
+        assert result[0].speed == JetSpeed.OFF
+        assert result[1].jet_id == 2
+        assert result[1].speed == JetSpeed.HIGH_SPEED
+        assert result[2].jet_id == 3
+        assert result[2].speed == JetSpeed.LOW_SPEED
 
     def test_update_info_startup(self, startup_response: dict[str, object]) -> None:
         """Test updating spa info from startup response."""
