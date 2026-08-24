@@ -97,16 +97,16 @@ class Spa:
                 updated.add(attr_name)
 
         if "JET" in data and isinstance(data["JET"], dict):
-            self.jets = _merge_entities(
-                self.jets, Jet.list_from_dict(data["JET"]), lambda j: j.jet_id
-            )
+            new_jets = Jet.list_from_dict(data["JET"], existing=self.jets)
+            self.jets = _merge_entities(self.jets, new_jets, lambda j: j.jet_id)
             updated.add("jets")
 
         if "lights" in data and isinstance(data["lights"], dict):
+            new_zones = LightZone.list_from_dict(
+                data["lights"], existing=self.light_zones
+            )
             self.light_zones = _merge_entities(
-                self.light_zones,
-                LightZone.list_from_dict(data["lights"]),
-                lambda z: z.zone_id,
+                self.light_zones, new_zones, lambda z: z.zone_id
             )
             updated.add("light_zones")
 
@@ -342,58 +342,76 @@ class Jet:
     on_seconds: int
 
     @staticmethod
-    def from_dict(jet_id: int, data: dict[str, object]) -> Jet:
+    def from_dict(
+        jet_id: int,
+        data: dict[str, object],
+        existing: Jet | None = None,
+    ) -> Jet:
         """Create a Jet from API response data.
 
         Args:
         ----
             jet_id: The jet number (1-based).
             data: The ``JETn`` dict from the /status response.
+            existing: Optional existing Jet instance to preserve cached fields.
 
         Returns:
         -------
             A Jet instance.
 
         """
-        config = data.get("config", {})
-        status = data.get("status", {})
+        # Start with cached values if present, otherwise safe defaults
+        is_enabled = existing.is_enabled if existing else True
+        speed = existing.speed if existing else JetSpeed.OFF
+        on_seconds = existing.on_seconds if existing else 0
 
-        # A jet is disabled if its key in config is set to "disable"
-        jet_key = f"JET{jet_id}"
-        is_enabled = config.get(jet_key, "enable") != "disable"
+        config = data.get("config")
+        if isinstance(config, dict):
+            is_enabled = config.get(f"JET{jet_id}", "enable") != "disable"
 
-        # Find the on_seconds key dynamically (e.g., jet_1_ON_sec)
-        on_sec_key = f"jet_{jet_id}_ON_sec"
-        on_seconds = int(status.get(on_sec_key, 0)) // 256
+        status = data.get("status")
+        if isinstance(status, dict):
+            if "speed" in status:
+                speed = JetSpeed.build(status.get("speed"))
+            on_sec_key = f"jet_{jet_id}_ON_sec"
+            if on_sec_key in status:
+                on_seconds = int(status.get(on_sec_key, 0)) // 256
 
         return Jet(
             jet_id=jet_id,
-            speed=JetSpeed.build(status.get("speed")),
+            speed=speed,
             is_enabled=is_enabled,
             on_seconds=on_seconds,
         )
 
     @staticmethod
-    def list_from_dict(data: dict[str, object]) -> list[Jet]:
+    def list_from_dict(
+        data: dict[str, object],
+        existing: list[Jet] | None = None,
+    ) -> list[Jet]:
         """Parse all jets from the JET section of the /status response.
 
         Args:
         ----
             data: The ``JET`` dict from the /status response.
+            existing: Optional existing list of Jet instances for field preservation.
 
         Returns:
         -------
             A list of Jet instances.
 
         """
+        existing_map = {j.jet_id: j for j in existing} if existing else {}
         jets: list[Jet] = []
         for key, value in data.items():
-            if key.startswith("JET") and isinstance(value, dict):
+            if key.upper().startswith("JET") and isinstance(value, dict):
                 try:
                     jet_id = int(key[3:])
                 except ValueError:
                     continue
-                jets.append(Jet.from_dict(jet_id, value))
+                jets.append(
+                    Jet.from_dict(jet_id, value, existing=existing_map.get(jet_id))
+                )
         return sorted(jets, key=lambda j: j.jet_id)
 
 
@@ -442,34 +460,60 @@ class LightZone:
     rgb_state: str = "inactive"
 
     @staticmethod
-    def from_dict(zone_id: int, data: dict[str, object]) -> LightZone:
+    def from_dict(
+        zone_id: int,
+        data: dict[str, object],
+        existing: LightZone | None = None,
+    ) -> LightZone:
         """Create a LightZone from API response data.
 
         Args:
         ----
             zone_id: The zone number (1-based).
             data: The ``zoneN`` dict from the /status response.
+            existing: Optional existing LightZone instance to preserve cached fields.
 
         Returns:
         -------
             A LightZone instance.
 
         """
-        config = data.get("config", {})
-        status = data.get("status", {})
+        config = data.get("config")
+        status = data.get("status")
 
-        zone_key = f"zone_{zone_id}"
-        is_enabled = config.get(zone_key, "disable") != "disable"
+        # Start with cached values if present, otherwise safe defaults
+        is_enabled = existing.is_enabled if existing else False
+        color = existing.color if existing else LightColor.UNKNOWN
+        light_wheel = existing.light_wheel if existing else LightWheelMode.OFF
+        intensity = existing.intensity if existing else 0
+        is_on = existing.is_on if existing else False
+        loop_speed = existing.loop_speed if existing else 0
+        c_red = existing.c_red if existing else 0
+        c_green = existing.c_green if existing else 0
+        c_blue = existing.c_blue if existing else 0
+        rgb_state = existing.rgb_state if existing else "inactive"
 
-        color = LightColor.build(status.get("color"))
-        light_wheel = LightWheelMode.build(status.get("lightWheel"))
-        intensity = int(status.get("Intensity", 0))
-        is_on = intensity > 0
+        if isinstance(config, dict):
+            is_enabled = config.get(f"zone_{zone_id}", "disable") != "disable"
 
-        c_red = int(status.get("cRed", 0))
-        c_green = int(status.get("cGreen", 0))
-        c_blue = int(status.get("cBlue", 0))
-        rgb_state = str(status.get("RGBstate", "inactive")).lower()
+        if isinstance(status, dict):
+            if "color" in status:
+                color = LightColor.build(status.get("color"))
+            if "lightWheel" in status:
+                light_wheel = LightWheelMode.build(status.get("lightWheel"))
+            if "Intensity" in status:
+                intensity = int(status.get("Intensity", 0))
+                is_on = intensity > 0
+            if "loopSpeed" in status:
+                loop_speed = int(status.get("loopSpeed", 0))
+            if "cRed" in status:
+                c_red = int(status.get("cRed", 0))
+            if "cGreen" in status:
+                c_green = int(status.get("cGreen", 0))
+            if "cBlue" in status:
+                c_blue = int(status.get("cBlue", 0))
+            if "RGBstate" in status:
+                rgb_state = str(status.get("RGBstate", "inactive")).lower()
 
         if rgb_state == "active" and (c_red, c_green, c_blue) != (0, 0, 0):
             color = LightColor.CUSTOM
@@ -481,7 +525,7 @@ class LightZone:
             color=color,
             light_wheel=light_wheel,
             intensity=intensity,
-            loop_speed=int(status.get("loopSpeed", 0)),
+            loop_speed=loop_speed,
             c_red=c_red,
             c_green=c_green,
             c_blue=c_blue,
@@ -489,26 +533,36 @@ class LightZone:
         )
 
     @staticmethod
-    def list_from_dict(data: dict[str, object]) -> list[LightZone]:
+    def list_from_dict(
+        data: dict[str, object],
+        existing: list[LightZone] | None = None,
+    ) -> list[LightZone]:
         """Parse all light zones from the lights section.
 
         Args:
         ----
             data: The ``lights`` dict from the /status response.
+            existing: Optional existing list of LightZone instances.
 
         Returns:
         -------
             A list of LightZone instances.
 
         """
+        existing_map = {z.zone_id: z for z in existing} if existing else {}
         zones: list[LightZone] = []
         for key, value in data.items():
-            if key.startswith("zone") and isinstance(value, dict):
+            key_lower = key.lower()
+            if key_lower.startswith("zone") and isinstance(value, dict):
                 try:
-                    zone_id = int(key[4:])
+                    zone_id = int(key_lower[4:])
                 except ValueError:
                     continue
-                zones.append(LightZone.from_dict(zone_id, value))
+                zones.append(
+                    LightZone.from_dict(
+                        zone_id, value, existing=existing_map.get(zone_id)
+                    )
+                )
         return sorted(zones, key=lambda z: z.zone_id)
 
 
@@ -911,10 +965,13 @@ def _merge_entities[T, K](
     existing: list[T], incoming: list[T], key_func: Callable[[T], K]
 ) -> list[T]:
     """Merge incoming partial updates into an existing list by entity ID."""
-    if existing and len(incoming) < len(existing):
-        incoming_map = {key_func(item): item for item in incoming}
-        return [incoming_map.get(key_func(item), item) for item in existing]
-    return incoming
+    if not existing:
+        return incoming
+    incoming_map = {key_func(item): item for item in incoming}
+    result = [incoming_map.get(key_func(item), item) for item in existing]
+    existing_keys = {key_func(item) for item in existing}
+    result.extend(item for item in incoming if key_func(item) not in existing_keys)
+    return result
 
 
 _SECTION_PARSERS: tuple[tuple[str, str, Callable[[dict[str, object]], object]], ...] = (
