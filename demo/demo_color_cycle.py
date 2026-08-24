@@ -50,7 +50,13 @@ async def main() -> None:
             f"IsOn={original_is_on}\n"
         )
 
-        print("--- Step 1: Cycling through Colors ---")
+        # Ensure the light is turned on so color changes are visible
+        print(
+            "✦ Turning on Zone 1 (Brightness Level 5) to make color cycling visible..."
+        )
+        await spa.set_light_brightness(1, 5)
+
+        print("\n--- Step 1: Cycling through Colors ---")
         for color in COLORS:
             print(f"  ✦  Setting Color → {color.name}")
             await spa.set_light_color(1, color)
