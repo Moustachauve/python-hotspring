@@ -13,9 +13,6 @@ sys.path.append(os.path.join(os.getcwd(), "src"))
 
 import time
 
-# pylint: disable=wrong-import-position
-import aiohttp
-
 from hotspring import HotSpring
 from hotspring.exceptions import HotSpringError
 from hotspring.models import Spa
@@ -143,7 +140,7 @@ async def main() -> None:
         t0 = time.perf_counter()
         try:
             await spa.update()
-        except (HotSpringError, aiohttp.ClientError) as err:
+        except HotSpringError as err:
             print(f"Error fetching data: {err}")
             return
         t_initial = time.perf_counter() - t0
@@ -152,7 +149,7 @@ async def main() -> None:
         t0 = time.perf_counter()
         try:
             await spa.update()
-        except (HotSpringError, aiohttp.ClientError) as err:
+        except HotSpringError as err:
             print(f"Error on second update: {err}")
             return
         t_cached = time.perf_counter() - t0
@@ -163,7 +160,7 @@ async def main() -> None:
             t0 = time.perf_counter()
             await spa.update_diagnostics()
             t_diag = time.perf_counter() - t0
-        except (HotSpringError, aiohttp.ClientError) as err:
+        except HotSpringError as err:
             print(f"Diagnostics endpoint not available: {err}")
 
         # 4. Tier 3: Extended Water Care (/getFWIQData)
@@ -172,7 +169,7 @@ async def main() -> None:
             t0 = time.perf_counter()
             await spa.update_water_care()
             t_water = time.perf_counter() - t0
-        except (HotSpringError, aiohttp.ClientError):
+        except HotSpringError:
             pass
 
         s = spa.spa
