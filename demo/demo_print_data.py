@@ -181,15 +181,22 @@ async def main() -> None:
         print_identity(s)
         print_heater_and_jets(s)
         print_lighting_and_watercare(s)
-        print_diagnostics(s)
+        if t_diag is not None:
+            print_diagnostics(s)
 
         # Print performance benchmark summary
         print("\n" + "=" * 55)
         print("  POLLING PERFORMANCE BENCHMARK")
         print("=" * 55)
         print(f"  1. Cold Sync (Tier 1 Status + Tier 2 Identity): {t_initial:.3f} s")
-        speedup = f"({t_initial / t_cached:.1f}x faster!)" if t_cached > 0 else ""
-        print(f"  2. Warm Poll (Tier 1 Fast Status Loop):        {t_cached:.3f} s  {speedup}")
+        speedup = (
+            f"({t_initial / t_cached:.1f}x faster!)"
+            if t_cached > 0 and t_initial > t_cached
+            else ""
+        )
+        print(
+            f"  2. Warm Poll (Tier 1 Fast Status Loop):        {t_cached:.3f} s  {speedup}"
+        )
         if t_diag is not None:
             print(f"  3. Extended Diagnostics (Tier 3 /addDebugData): {t_diag:.3f} s")
         if t_water is not None:
