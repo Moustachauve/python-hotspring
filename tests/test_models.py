@@ -1185,13 +1185,41 @@ class TestControlResponseParsing:
         assert updated.heater_lock is True
         assert updated.temperature_unit == TemperatureUnit.FAHRENHEIT
 
-    def test_heater_invalid_mode_preserves_existing(self) -> None:
-        """Test that 'invalid' mode in response does not overwrite known mode."""
+    def test_heater_invalid_mode_accepted(self) -> None:
+        """Test that 'invalid' mode in response is accepted as a valid state."""
         existing = Heater(heating_mode=HeatingMode.AUTO_WITH_BOOST)
         updated = Heater.from_dict(
             {"status": {"heatingMode": "invalid"}}, existing=existing
         )
+        assert updated.heating_mode == HeatingMode.INVALID
+
+    def test_heater_unknown_mode_preserves_existing(self) -> None:
+        """Test that 'unknown' or unparseable mode does not overwrite known mode."""
+        existing = Heater(heating_mode=HeatingMode.AUTO_WITH_BOOST)
+        updated = Heater.from_dict(
+            {"status": {"heatingMode": "unknown"}}, existing=existing
+        )
         assert updated.heating_mode == HeatingMode.AUTO_WITH_BOOST
+
+        updated2 = Heater.from_dict(
+            {"control": {"heatingMode": "nonexistent"}}, existing=existing
+        )
+        assert updated2.heating_mode == HeatingMode.AUTO_WITH_BOOST
+
+    def test_heater_temperature_lock_formats(self) -> None:
+        """Test parsing various truthy and falsy temperature lock formats."""
+        existing = Heater(heater_lock=False)
+        for val in ("on", "ON", "enable", "true", "1"):
+            h = Heater.from_dict(
+                {"control": {"temperatureLock": val}}, existing=existing
+            )
+            assert h.heater_lock is True
+
+        for val in ("off", "OFF", "disable", "false", "0"):
+            h = Heater.from_dict(
+                {"control": {"temperatureLock": val}}, existing=existing
+            )
+            assert h.heater_lock is False
 
     def test_jet_control_payload(self) -> None:
         """Test parsing jet control responses."""
@@ -1200,6 +1228,13 @@ class TestControlResponseParsing:
 
         jet2 = Jet.from_dict(2, {"control": {"speed": "lowSpeed"}})
         assert jet2.speed == JetSpeed.LOW_SPEED
+
+        # Unknown speed preserves existing
+        existing_jet = Jet(jet_id=1, speed=JetSpeed.HIGH_SPEED)
+        jet_unknown = Jet.from_dict(
+            1, {"control": "invalid_speed"}, existing=existing_jet
+        )
+        assert jet_unknown.speed == JetSpeed.HIGH_SPEED
 
         # Nested in control dict
         jets = Jet.list_from_dict(
@@ -1219,6 +1254,10 @@ class TestControlResponseParsing:
 
         blower_dict = Blower.from_dict({"control": {"blower": "on"}})
         assert blower_dict.is_on is True
+
+        # Null safety
+        blower_none = Blower.from_dict({"control": {"blower": None}})
+        assert blower_none.is_on is False
 
     def test_light_zone_control_payload(self) -> None:
         """Test parsing light zone control responses."""
@@ -1291,6 +1330,13 @@ class TestControlResponseParsing:
         assert cc_dict.is_enabled is False
         assert cc_dict.vanishing_act is True
 
+        # Null safety
+        cc_none = CleanCycle.from_dict(
+            {"control": {"cleanCycle": None, "vanishingAct": None}}
+        )
+        assert cc_none.is_enabled is False
+        assert cc_none.vanishing_act is False
+
     def test_spa_lock_control_payload(self) -> None:
         """Test parsing spa lock control responses."""
         lock = SpaLock.from_dict({"control": "on"})
@@ -1299,3 +1345,45 @@ class TestControlResponseParsing:
         lock_dict = SpaLock.from_dict({"control": {"spaLock": "off"}})
         assert lock_dict.is_locked is False
 
+        # Null safety
+        lock_none = SpaLock.from_dict({"control": {"spaLock": None}})
+        assert lock_none.is_locked is False
+
+    def test_spa_update_from_dict_control_payload(self) -> None:
+        """Test full Spa model update from POST /spaManager response payloads."""
+        spa = Spa(
+            {
+                "heater": {
+                    "status": {
+                        "setWaterTemperature": "100F",
+                        "heatingMode": "invalid",
+                    }
+                },
+                "JET": {"JET1": {"status": {"speed": "off"}}},
+                "lights": {"zone1": {"status": {"color": "RED", "Intensity": 0}}},
+            }
+        )
+        assert spa.heater.set_temperature == 100.0
+        assert spa.heater.heating_mode == HeatingMode.INVALID
+
+        # Partial heater control echo
+        updated = spa.update_from_dict(
+            {"heater": {"control": {"temperatureABS": "104"}}}
+        )
+        assert "heater" in updated
+        assert spa.heater.set_temperature == 104.0
+        assert spa.heater.heating_mode == HeatingMode.INVALID
+
+        # Partial jet control echo
+        updated_jet = spa.update_from_dict(
+            {"JET": {"control": {"JET1": {"control": "highSpeed"}}}}
+        )
+        assert "jets" in updated_jet
+        assert spa.jets[0].speed == JetSpeed.HIGH_SPEED
+
+        # Partial light control echo
+        updated_light = spa.update_from_dict(
+            {"lights": {"control": {"Zone1": {"control": {"color": "BLUE"}}}}}
+        )
+        assert "light_zones" in updated_light
+        assert spa.light_zones[0].color == LightColor.BLUE
