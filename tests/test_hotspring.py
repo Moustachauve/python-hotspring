@@ -164,6 +164,7 @@ class TestUpdate:
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             spa = await client.update()
+            # pylint: disable=protected-access
             assert client._identity_loaded is True
             assert spa.info.hostname == "ConnectedSpa_112233"
 
