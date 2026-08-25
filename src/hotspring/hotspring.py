@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from dataclasses import dataclass
 from typing import Self
@@ -29,6 +30,7 @@ from .models import (
     Diagnostics,
     FreshWaterIQ,
     Spa,
+    SpaInfo,
 )
 
 
@@ -53,6 +55,8 @@ class HotSpring:
     session: aiohttp.ClientSession | None = None
     request_timeout: float = 10.0
     _close_session: bool = False
+    _identity_loaded: bool = False
+    _model_task: asyncio.Task[None] | None = None
     spa: Spa | None = None
 
     @backoff.on_exception(
@@ -150,23 +154,66 @@ class HotSpring:
 
         return response_data
 
-    async def update(self) -> Spa:
-        """Get all spa information in a single polling cycle.
+    async def _safe_request(self, uri: str) -> dict[str, object] | None:
+        """Fetch an endpoint, returning None on error."""
+        with contextlib.suppress(HotSpringError):
+            return await self.request(uri)
+        return None
 
-        This method fetches the main /status endpoint and combines it with
-        identity information from /startup and /spamodel. Use this for
-        the primary 15-second polling cycle.
+    async def _fetch_model_info(self) -> None:
+        """Background task to fetch /spamodel without blocking."""
+        model_data = await self._safe_request("/spamodel")
+        if model_data and self.spa is not None:
+            self.spa.update_info(model_data)
 
-        Returns
+    async def update(self, *, refresh_identity: bool = False) -> Spa:
+        """Get all spa information.
+
+        On the initial call (or when `refresh_identity=True`), this method fetches
+        the main /status endpoint concurrently with /startup and /spaConnectStatus,
+        and triggers a background fetch for /spamodel.
+
+        On subsequent routine polling cycles, it only queries the fast /status
+        endpoint, avoiding redundant radio (LoRA) queries for static identity data.
+
+        Args:
+        ----
+            refresh_identity: Force re-fetching static identity from /startup
+                and /spamodel.
+
+        Returns:
         -------
             The updated Spa data object.
 
-        Raises
+        Raises:
         ------
             HotSpringError: If no data is returned from the spa.
 
         """
-        # Fetch main status
+        if not self._identity_loaded or refresh_identity:
+            status_res, startup_res, connect_res = await asyncio.gather(
+                self.request("/status"),
+                self._safe_request("/startup"),
+                self._safe_request("/spaConnectStatus"),
+            )
+
+            if self.spa is None:
+                self.spa = Spa(status_res)
+            else:
+                self.spa.update_from_dict(status_res)
+
+            if startup_res:
+                self.spa.update_info(startup_res)
+
+            if connect_res:
+                self.spa.update_connection_status(connect_res)
+
+            # Fetch /spamodel in background so it doesn't block the initial return
+            self._model_task = asyncio.create_task(self._fetch_model_info())
+
+            self._identity_loaded = True
+            return self.spa
+
         status_data = await self.request("/status")
 
         if self.spa is None:
@@ -174,31 +221,40 @@ class HotSpring:
         else:
             self.spa.update_from_dict(status_data)
 
-        # Fetch identity/startup info
-        identity_data: dict[str, object] = {}
-        try:
-            startup_data = await self.request("/startup")
-            identity_data.update(startup_data)
-        except HotSpringError:
-            pass
+        return self.spa
 
-        try:
-            model_data = await self.request("/spamodel")
-            identity_data.update(model_data)
-        except HotSpringError:
-            pass
+    async def update_identity(self) -> SpaInfo:
+        """Fetch and update static spa identity info (/startup and /spamodel).
+
+        Returns
+        -------
+            The updated SpaInfo data.
+
+        Raises
+        ------
+            HotSpringError: If the spa has not been initialized with update().
+
+        """
+        if self.spa is None:
+            msg = "Call update() before update_identity()"
+            raise HotSpringError(msg)
+
+        startup_res, model_res = await asyncio.gather(
+            self._safe_request("/startup"),
+            self._safe_request("/spamodel"),
+        )
+
+        identity_data: dict[str, object] = {}
+        if startup_res:
+            identity_data.update(startup_res)
+        if model_res:
+            identity_data.update(model_res)
 
         if identity_data:
             self.spa.update_info(identity_data)
 
-        # Fetch connection status
-        try:
-            connect_data = await self.request("/spaConnectStatus")
-            self.spa.update_connection_status(connect_data)
-        except HotSpringError:
-            pass  # Non-critical
-
-        return self.spa
+        self._identity_loaded = True
+        return self.spa.info
 
     async def update_water_care(self) -> FreshWaterIQ:
         """Update FreshWater IQ water quality data.
@@ -528,6 +584,8 @@ class HotSpring:
 
     async def close(self) -> None:
         """Close open client session."""
+        if self._model_task and not self._model_task.done():
+            self._model_task.cancel()
         if self.session and self._close_session:
             await self.session.close()
 

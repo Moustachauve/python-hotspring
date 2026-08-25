@@ -11,10 +11,13 @@ import sys
 # Add src to sys.path so we can import hotspring
 sys.path.append(os.path.join(os.getcwd(), "src"))
 
+import time
+
 # pylint: disable=wrong-import-position
 import aiohttp
 
 from hotspring import HotSpring
+from hotspring.exceptions import HotSpringError
 from hotspring.models import Spa
 
 
@@ -129,29 +132,72 @@ def print_diagnostics(s: Spa) -> None:
 
 
 async def main() -> None:
-    """Print all spa data."""
+    """Print all spa data and performance metrics."""
     # Use the spa IP from your environment or default
     host = os.getenv("HOTSPRING_IP", "192.168.11.88")
 
     async with HotSpring(host) as spa:
         print(f"Connecting to spa at {host}...")
+
+        # 1. Tier 1 & 2: Initial Cold Sync (Status + Static Identity)
+        t0 = time.perf_counter()
         try:
             await spa.update()
-            # Diagnostics/Debug data is often on a separate endpoint
-            await spa.update_diagnostics()
-        except aiohttp.ClientError as err:
+        except (HotSpringError, aiohttp.ClientError) as err:
             print(f"Error fetching data: {err}")
             return
+        t_initial = time.perf_counter() - t0
+
+        # 2. Tier 1: Warm Poll (Routine status update with cached identity)
+        t0 = time.perf_counter()
+        try:
+            await spa.update()
+        except (HotSpringError, aiohttp.ClientError) as err:
+            print(f"Error on second update: {err}")
+            return
+        t_cached = time.perf_counter() - t0
+
+        # 3. Tier 3: Extended Diagnostics (/addDebugData)
+        t_diag: float | None = None
+        try:
+            t0 = time.perf_counter()
+            await spa.update_diagnostics()
+            t_diag = time.perf_counter() - t0
+        except (HotSpringError, aiohttp.ClientError) as err:
+            print(f"Diagnostics endpoint not available: {err}")
+
+        # 4. Tier 3: Extended Water Care (/getFWIQData)
+        t_water: float | None = None
+        try:
+            t0 = time.perf_counter()
+            await spa.update_water_care()
+            t_water = time.perf_counter() - t0
+        except (HotSpringError, aiohttp.ClientError):
+            pass
 
         s = spa.spa
         if s is None:
             print("Error: Spa object is None after update.")
             return
 
+        # Print structured spa data
         print_identity(s)
         print_heater_and_jets(s)
         print_lighting_and_watercare(s)
         print_diagnostics(s)
+
+        # Print performance benchmark summary
+        print("\n" + "=" * 55)
+        print("  POLLING PERFORMANCE BENCHMARK")
+        print("=" * 55)
+        print(f"  1. Cold Sync (Tier 1 Status + Tier 2 Identity): {t_initial:.3f} s")
+        speedup = f"({t_initial / t_cached:.1f}x faster!)" if t_cached > 0 else ""
+        print(f"  2. Warm Poll (Tier 1 Fast Status Loop):        {t_cached:.3f} s  {speedup}")
+        if t_diag is not None:
+            print(f"  3. Extended Diagnostics (Tier 3 /addDebugData): {t_diag:.3f} s")
+        if t_water is not None:
+            print(f"  4. Extended Water Care (Tier 3 /getFWIQData):   {t_water:.3f} s")
+        print("=" * 55)
 
 
 if __name__ == "__main__":
