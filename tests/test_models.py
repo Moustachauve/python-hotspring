@@ -1194,7 +1194,7 @@ class TestControlResponseParsing:
         assert updated.heating_mode == HeatingMode.INVALID
 
     def test_heater_unknown_mode_preserves_existing(self) -> None:
-        """Test that 'unknown' or unparseable mode does not overwrite known mode."""
+        """Test that 'unknown' or unparsable mode does not overwrite known mode."""
         existing = Heater(heating_mode=HeatingMode.AUTO_WITH_BOOST)
         updated = Heater.from_dict(
             {"status": {"heatingMode": "unknown"}}, existing=existing
