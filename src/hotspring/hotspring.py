@@ -166,8 +166,9 @@ class HotSpring:
         the main /status endpoint concurrently with /startup, /spaConnectStatus,
         and /spamodel.
 
-        On subsequent routine polling cycles, it only queries the fast /status
-        endpoint, avoiding redundant radio (LoRA) queries for static identity data.
+        On subsequent routine polling cycles, it queries /status and /spaConnectStatus
+        concurrently, avoiding redundant radio (LoRA) queries for static identity data
+        while keeping telemetry and connection status fresh.
 
         Args:
         ----
@@ -208,12 +209,18 @@ class HotSpring:
             self._identity_loaded = True
             return self.spa
 
-        status_data = await self.request("/status")
+        status_res, connect_res = await asyncio.gather(
+            self.request("/status"),
+            self._safe_request("/spaConnectStatus"),
+        )
 
         if self.spa is None:  # Safety guard; spa is always set after cold sync
-            self.spa = Spa(status_data)
+            self.spa = Spa(status_res)
         else:
-            self.spa.update_from_dict(status_data)
+            self.spa.update_from_dict(status_res)
+
+        if connect_res:
+            self.spa.update_connection_status(connect_res)
 
         return self.spa
 

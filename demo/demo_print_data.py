@@ -190,9 +190,7 @@ async def main() -> None:
         print("=" * 55)
         print(f"  1. Cold Sync (Tier 1 Status + Tier 2 Identity): {t_initial:.3f} s")
         speedup = (
-            f"({t_initial / t_cached:.1f}x faster!)"
-            if 0 < t_cached < t_initial
-            else ""
+            f"({t_initial / t_cached:.1f}x faster!)" if 0 < t_cached < t_initial else ""
         )
         print(
             f"  2. Warm Poll (Tier 1 Fast Status Loop):        {t_cached:.3f} s  {speedup}"

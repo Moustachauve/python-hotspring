@@ -136,12 +136,18 @@ class TestUpdate:
     ) -> None:
         """Test that update reuses the same Spa object."""
         _add_update_mocks(aresponses)
-        # Second update only fetches /status (cached identity)
+        # Second update fetches /status and /spaConnectStatus (cached static identity)
         aresponses.add(
             "192.168.1.100",
             "/status",
             "GET",
             _json_response("status.json"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/spaConnectStatus",
+            "GET",
+            _json_response("spa_connect_status.json"),
         )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
@@ -153,13 +159,19 @@ class TestUpdate:
     async def test_update_cached_identity(
         self, aresponses: ResponsesMockServer
     ) -> None:
-        """Test that subsequent updates only call /status and preserve identity."""
+        """Test that subsequent updates preserve cached identity."""
         _add_update_mocks(aresponses)
         aresponses.add(
             "192.168.1.100",
             "/status",
             "GET",
             _json_response("status.json"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/spaConnectStatus",
+            "GET",
+            _json_response("spa_connect_status.json"),
         )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
@@ -171,6 +183,34 @@ class TestUpdate:
             # Routine update
             spa_updated = await client.update()
             assert spa_updated.info.hostname == "ConnectedSpa_112233"
+
+    async def test_update_refreshes_connection_status(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that routine updates refresh connection_status dynamically."""
+        _add_update_mocks(
+            aresponses, connect_payload=json.dumps({"spaConnectStatus": "false"})
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/status",
+            "GET",
+            _json_response("status.json"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/spaConnectStatus",
+            "GET",
+            _json_response("spa_connect_status.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+            assert spa.connection_status.spa_connected is False
+
+            # Routine update receives reconnect
+            spa_updated = await client.update()
+            assert spa_updated.connection_status.spa_connected is True
 
     async def test_update_force_refresh_identity(
         self, aresponses: ResponsesMockServer
