@@ -334,11 +334,11 @@ class Heater:  # pylint: disable=too-many-instance-attributes
         kwargs: dict[str, object] = {}
         status = data.get("status")
         if isinstance(status, dict):
-            kwargs.update(_parse_heater_status(status, existing))
+            kwargs.update(_parse_heater_status(status))
 
         control = data.get("control")
         if isinstance(control, dict):
-            kwargs.update(_parse_heater_control(control, existing))
+            kwargs.update(_parse_heater_control(control))
 
         base = existing or Heater()
         return replace(base, **kwargs)
@@ -388,11 +388,11 @@ class Jet:
         control = data.get("control")
         if isinstance(control, str):
             speed = JetSpeed.build(control)
-            if speed != JetSpeed.UNKNOWN or existing is None:
+            if speed != JetSpeed.UNKNOWN:
                 kwargs["speed"] = speed
         elif isinstance(control, dict) and "speed" in control:
             speed = JetSpeed.build(control.get("speed"))
-            if speed != JetSpeed.UNKNOWN or existing is None:
+            if speed != JetSpeed.UNKNOWN:
                 kwargs["speed"] = speed
 
         base = existing or Jet(jet_id=jet_id)
@@ -463,23 +463,11 @@ class Blower:
 
         control = data.get("control")
         if isinstance(control, str):
-            kwargs["is_on"] = control.lower() not in (
-                "off",
-                "disable",
-                "false",
-                "0",
-                "",
-            )
+            kwargs["is_on"] = _is_truthy(control)
         elif isinstance(control, dict) and "blower" in control:
             raw_blower = control.get("blower")
             if raw_blower is not None:
-                kwargs["is_on"] = str(raw_blower).lower() not in (
-                    "off",
-                    "disable",
-                    "false",
-                    "0",
-                    "",
-                )
+                kwargs["is_on"] = _is_truthy(raw_blower)
 
         base = existing or Blower()
         return replace(base, **kwargs)
@@ -609,11 +597,11 @@ class LogoLight:
         control = data.get("control")
         if isinstance(control, dict) and "brightness" in control:
             brightness = BrightnessLevel.build(control.get("brightness"))
-            if brightness != BrightnessLevel.UNKNOWN or existing is None:
+            if brightness != BrightnessLevel.UNKNOWN:
                 kwargs["brightness"] = brightness
         elif isinstance(control, str):
             brightness = BrightnessLevel.build(control)
-            if brightness != BrightnessLevel.UNKNOWN or existing is None:
+            if brightness != BrightnessLevel.UNKNOWN:
                 kwargs["brightness"] = brightness
 
         base = existing or LogoLight()
@@ -656,31 +644,13 @@ class CleanCycle:
             if "cleanCycle" in control:
                 raw_cc = control.get("cleanCycle")
                 if raw_cc is not None:
-                    kwargs["is_enabled"] = str(raw_cc).lower() not in (
-                        "off",
-                        "disable",
-                        "false",
-                        "0",
-                        "",
-                    )
+                    kwargs["is_enabled"] = _is_truthy(raw_cc)
             if "vanishingAct" in control:
                 raw_va = control.get("vanishingAct")
                 if raw_va is not None:
-                    kwargs["vanishing_act"] = str(raw_va).lower() not in (
-                        "off",
-                        "disable",
-                        "false",
-                        "0",
-                        "",
-                    )
+                    kwargs["vanishing_act"] = _is_truthy(raw_va)
         elif isinstance(control, str):
-            kwargs["is_enabled"] = control.lower() not in (
-                "off",
-                "disable",
-                "false",
-                "0",
-                "",
-            )
+            kwargs["is_enabled"] = _is_truthy(control)
 
         base = existing or CleanCycle()
         return replace(base, **kwargs)
@@ -718,21 +688,9 @@ class SpaLock:
         if isinstance(control, dict) and "spaLock" in control:
             raw_lock = control.get("spaLock")
             if raw_lock is not None:
-                kwargs["is_locked"] = str(raw_lock).lower() not in (
-                    "off",
-                    "disable",
-                    "false",
-                    "0",
-                    "",
-                )
+                kwargs["is_locked"] = _is_truthy(raw_lock)
         elif isinstance(control, str):
-            kwargs["is_locked"] = control.lower() not in (
-                "off",
-                "disable",
-                "false",
-                "0",
-                "",
-            )
+            kwargs["is_locked"] = _is_truthy(control)
 
         base = existing or SpaLock()
         return replace(base, **kwargs)
@@ -1191,29 +1149,30 @@ _SECTION_PARSERS: tuple[_SectionParser, ...] = (
 )
 
 
-def _parse_heater_temperatures(
-    status: dict[str, object], existing: Heater | None
-) -> dict[str, object]:
+def _is_truthy(value: object) -> bool:
+    """Return True if a string or raw value represents an enabled/truthy state."""
+    return str(value).lower() not in ("off", "disable", "false", "0", "")
+
+
+def _parse_heater_temperatures(status: dict[str, object]) -> dict[str, object]:
     """Parse temperature and unit fields for the heater."""
     kwargs: dict[str, object] = {}
     if "setWaterTemperature" in status:
         parsed_temp = _parse_temperature(status.get("setWaterTemperature"))
-        if parsed_temp is not None or existing is None:
+        if parsed_temp is not None:
             kwargs["set_temperature"] = parsed_temp
     if "currentWaterTemperature" in status:
         parsed_current = _parse_temperature(status.get("currentWaterTemperature"))
-        if parsed_current is not None or existing is None:
+        if parsed_current is not None:
             kwargs["current_temperature"] = parsed_current
     if "temperatureUnit" in status:
         unit = TemperatureUnit.build(status.get("temperatureUnit"))
-        if unit != TemperatureUnit.UNKNOWN or existing is None:
+        if unit != TemperatureUnit.UNKNOWN:
             kwargs["temperature_unit"] = unit
     return kwargs
 
 
-def _parse_heater_status(
-    status: dict[str, object], existing: Heater | None
-) -> dict[str, object]:
+def _parse_heater_status(status: dict[str, object]) -> dict[str, object]:
     """Parse status fields for the heater."""
     kwargs: dict[str, object] = {}
     if "heater" in status:
@@ -1226,39 +1185,31 @@ def _parse_heater_status(
         )
     if "heatingMode" in status:
         mode = HeatingMode.build(status.get("heatingMode"))
-        if mode != HeatingMode.UNKNOWN or existing is None:
+        if mode != HeatingMode.UNKNOWN:
             kwargs["heating_mode"] = mode
     if "heaterCurrent" in status:
         kwargs["heater_current"] = int(status.get("heaterCurrent", 0)) / 2560.0
     if "heaterHours" in status:
         kwargs["heater_on_seconds"] = int(status.get("heaterHours", 0)) // 256
-    kwargs.update(_parse_heater_temperatures(status, existing))
+    kwargs.update(_parse_heater_temperatures(status))
     return kwargs
 
 
-def _parse_heater_control(
-    control: dict[str, object], existing: Heater | None
-) -> dict[str, object]:
+def _parse_heater_control(control: dict[str, object]) -> dict[str, object]:
     """Parse control fields for the heater."""
     kwargs: dict[str, object] = {}
     if "temperatureABS" in control:
         parsed_temp = _parse_temperature(control.get("temperatureABS"))
-        if parsed_temp is not None or existing is None:
+        if parsed_temp is not None:
             kwargs["set_temperature"] = parsed_temp
     if "heatingMode" in control:
         mode = HeatingMode.build(control.get("heatingMode"))
-        if mode != HeatingMode.UNKNOWN or existing is None:
+        if mode != HeatingMode.UNKNOWN:
             kwargs["heating_mode"] = mode
     if "temperatureLock" in control:
         raw_lock = control.get("temperatureLock")
         if raw_lock is not None:
-            kwargs["heater_lock"] = str(raw_lock).lower() not in (
-                "off",
-                "disable",
-                "false",
-                "0",
-                "",
-            )
+            kwargs["heater_lock"] = _is_truthy(raw_lock)
     return kwargs
 
 
