@@ -56,7 +56,6 @@ class HotSpring:
     request_timeout: float = 10.0
     _close_session: bool = False
     _identity_loaded: bool = False
-    _model_task: asyncio.Task[None] | None = None
     spa: Spa | None = None
 
     @backoff.on_exception(
@@ -160,18 +159,12 @@ class HotSpring:
             return await self.request(uri)
         return None
 
-    async def _fetch_model_info(self) -> None:
-        """Background task to fetch /spamodel without blocking."""
-        model_data = await self._safe_request("/spamodel")
-        if model_data and self.spa is not None:
-            self.spa.update_info(model_data)
-
     async def update(self, *, refresh_identity: bool = False) -> Spa:
         """Get all spa information.
 
         On the initial call (or when `refresh_identity=True`), this method fetches
-        the main /status endpoint concurrently with /startup and /spaConnectStatus,
-        and triggers a background fetch for /spamodel.
+        the main /status endpoint concurrently with /startup, /spaConnectStatus,
+        and /spamodel.
 
         On subsequent routine polling cycles, it only queries the fast /status
         endpoint, avoiding redundant radio (LoRA) queries for static identity data.
@@ -191,10 +184,11 @@ class HotSpring:
 
         """
         if not self._identity_loaded or refresh_identity:
-            status_res, startup_res, connect_res = await asyncio.gather(
+            status_res, startup_res, connect_res, model_res = await asyncio.gather(
                 self.request("/status"),
                 self._safe_request("/startup"),
                 self._safe_request("/spaConnectStatus"),
+                self._safe_request("/spamodel"),
             )
 
             if self.spa is None:
@@ -205,18 +199,18 @@ class HotSpring:
             if startup_res:
                 self.spa.update_info(startup_res)
 
+            if model_res:
+                self.spa.update_info(model_res)
+
             if connect_res:
                 self.spa.update_connection_status(connect_res)
-
-            # Fetch /spamodel in background so it doesn't block the initial return
-            self._model_task = asyncio.create_task(self._fetch_model_info())
 
             self._identity_loaded = True
             return self.spa
 
         status_data = await self.request("/status")
 
-        if self.spa is None:
+        if self.spa is None:  # Safety guard; spa is always set after cold sync
             self.spa = Spa(status_data)
         else:
             self.spa.update_from_dict(status_data)
@@ -584,8 +578,6 @@ class HotSpring:
 
     async def close(self) -> None:
         """Close open client session."""
-        if self._model_task and not self._model_task.done():
-            self._model_task.cancel()
         if self.session and self._close_session:
             await self.session.close()
 

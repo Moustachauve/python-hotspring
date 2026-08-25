@@ -46,6 +46,7 @@ def _add_update_mocks(
     *,
     startup_status: int = 200,
     connect_payload: str | None = None,
+    spamodel_status: int = 200,
 ) -> None:
     """Add mock responses for a full update() call."""
     host = "192.168.1.100"
@@ -66,6 +67,12 @@ def _add_update_mocks(
             headers={"Content-Type": "application/json"},
             text=connect,
         ),
+    )
+    aresponses.add(
+        host,
+        "/spamodel",
+        "GET",
+        _json_response("spamodel.json", status=spamodel_status),
     )
 
 
@@ -182,17 +189,9 @@ class TestUpdate:
     ) -> None:
         """Test update including spamodel endpoint."""
         _add_update_mocks(aresponses)
-        aresponses.add(
-            "192.168.1.100",
-            "/spamodel",
-            "GET",
-            _json_response("spamodel.json"),
-        )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             spa = await client.update()
-            if client._model_task:
-                await client._model_task
 
         assert spa.info.brand_id == "0"
         assert spa.info.volume == 335
@@ -223,6 +222,31 @@ class TestUpdate:
         assert info.brand_id == "0"
         assert info.volume == 335
 
+    async def test_update_identity_both_fail_gracefully(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test update_identity() when both /startup and /spamodel fail."""
+        _add_update_mocks(aresponses)
+        aresponses.add(
+            "192.168.1.100",
+            "/startup",
+            "GET",
+            Response(status=500, text="error"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/spamodel",
+            "GET",
+            Response(status=500, text="error"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            info = await client.update_identity()
+
+        # Identity from initial cold sync should be preserved
+        assert info.hostname == "ConnectedSpa_112233"
+
     async def test_update_identity_without_update_raises(self) -> None:
         """Test that update_identity() before update() raises HotSpringError."""
         async with HotSpring(host="192.168.1.100") as client:
@@ -240,6 +264,52 @@ class TestUpdate:
 
         assert spa is not None
         assert spa.heater.is_on is True
+
+    async def test_update_spamodel_failure_non_critical(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that /spamodel failure doesn't break update."""
+        _add_update_mocks(aresponses, spamodel_status=500)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+
+        assert spa is not None
+        assert spa.heater.is_on is True
+
+    async def test_cold_sync_status_failure_propagates(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that /status failure in cold sync propagates as HotSpringError."""
+        for _ in range(3):
+            aresponses.add(
+                "192.168.1.100",
+                "/status",
+                "GET",
+                Response(status=500, text="error"),
+            )
+            aresponses.add(
+                "192.168.1.100",
+                "/startup",
+                "GET",
+                _json_response("startup.json"),
+            )
+            aresponses.add(
+                "192.168.1.100",
+                "/spaConnectStatus",
+                "GET",
+                _json_response("spa_connect_status.json"),
+            )
+            aresponses.add(
+                "192.168.1.100",
+                "/spamodel",
+                "GET",
+                _json_response("spamodel.json"),
+            )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            with pytest.raises(HotSpringError):
+                await client.update()
 
 
 class TestUpdateWaterCare:
@@ -716,3 +786,8 @@ class TestConnection:
             assert client.session is not None
             # pylint: disable=protected-access
             assert client._close_session is True
+
+    async def test_close_is_safe_without_session(self) -> None:
+        """Test that close() works cleanly when no session was created."""
+        client = HotSpring(host="192.168.1.100")
+        await client.close()
