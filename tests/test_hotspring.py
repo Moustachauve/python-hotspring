@@ -129,13 +129,105 @@ class TestUpdate:
     ) -> None:
         """Test that update reuses the same Spa object."""
         _add_update_mocks(aresponses)
-        _add_update_mocks(aresponses)
+        # Second update only fetches /status (cached identity)
+        aresponses.add(
+            "192.168.1.100",
+            "/status",
+            "GET",
+            _json_response("status.json"),
+        )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             spa1 = await client.update()
             spa2 = await client.update()
 
         assert spa1 is spa2
+
+    async def test_update_cached_identity(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that subsequent updates only call /status and preserve identity."""
+        _add_update_mocks(aresponses)
+        aresponses.add(
+            "192.168.1.100",
+            "/status",
+            "GET",
+            _json_response("status.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+            assert client._identity_loaded is True
+            assert spa.info.hostname == "ConnectedSpa_112233"
+
+            # Routine update
+            spa_updated = await client.update()
+            assert spa_updated.info.hostname == "ConnectedSpa_112233"
+
+    async def test_update_force_refresh_identity(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that refresh_identity=True forces re-fetching identity."""
+        _add_update_mocks(aresponses)
+        _add_update_mocks(aresponses)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            spa = await client.update(refresh_identity=True)
+
+        assert spa.info.hostname == "ConnectedSpa_112233"
+
+    async def test_update_with_spamodel_response(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test update including spamodel endpoint."""
+        _add_update_mocks(aresponses)
+        aresponses.add(
+            "192.168.1.100",
+            "/spamodel",
+            "GET",
+            _json_response("spamodel.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+            if client._model_task:
+                await client._model_task
+
+        assert spa.info.brand_id == "0"
+        assert spa.info.volume == 335
+
+    async def test_update_identity_explicit(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test explicit update_identity() method."""
+        _add_update_mocks(aresponses)
+        aresponses.add(
+            "192.168.1.100",
+            "/startup",
+            "GET",
+            _json_response("startup.json"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/spamodel",
+            "GET",
+            _json_response("spamodel.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            info = await client.update_identity()
+
+        assert info.hostname == "ConnectedSpa_112233"
+        assert info.brand_id == "0"
+        assert info.volume == 335
+
+    async def test_update_identity_without_update_raises(self) -> None:
+        """Test that update_identity() before update() raises HotSpringError."""
+        async with HotSpring(host="192.168.1.100") as client:
+            with pytest.raises(HotSpringError, match="Call update"):
+                await client.update_identity()
 
     async def test_update_startup_failure_non_critical(
         self, aresponses: ResponsesMockServer
