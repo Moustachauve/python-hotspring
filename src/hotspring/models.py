@@ -334,32 +334,11 @@ class Heater:  # pylint: disable=too-many-instance-attributes
         kwargs: dict[str, object] = {}
         status = data.get("status")
         if isinstance(status, dict):
-            if "heater" in status:
-                kwargs["is_on"] = status.get("heater", "off") != "off"
-            if "heaterLock" in status:
-                kwargs["heater_lock"] = status.get("heaterLock", "off") != "off"
-            if "heatpumpInstalled" in status:
-                kwargs["heatpump_installed"] = (
-                    status.get("heatpumpInstalled", "notinstalled") != "notinstalled"
-                )
-            if "heatingMode" in status:
-                kwargs["heating_mode"] = HeatingMode.build(status.get("heatingMode"))
-            if "heaterCurrent" in status:
-                kwargs["heater_current"] = int(status.get("heaterCurrent", 0)) / 2560.0
-            if "heaterHours" in status:
-                kwargs["heater_on_seconds"] = int(status.get("heaterHours", 0)) // 256
-            if "setWaterTemperature" in status:
-                kwargs["set_temperature"] = _parse_temperature(
-                    status.get("setWaterTemperature")
-                )
-            if "currentWaterTemperature" in status:
-                kwargs["current_temperature"] = _parse_temperature(
-                    status.get("currentWaterTemperature")
-                )
-            if "temperatureUnit" in status:
-                kwargs["temperature_unit"] = TemperatureUnit.build(
-                    status.get("temperatureUnit")
-                )
+            kwargs.update(_parse_heater_status(status, existing))
+
+        control = data.get("control")
+        if isinstance(control, dict):
+            kwargs.update(_parse_heater_control(control, existing))
 
         base = existing or Heater()
         return replace(base, **kwargs)
@@ -406,6 +385,12 @@ class Jet:
             if on_sec_key in status:
                 kwargs["on_seconds"] = int(status.get(on_sec_key, 0)) // 256
 
+        control = data.get("control")
+        if isinstance(control, str):
+            kwargs["speed"] = JetSpeed.build(control)
+        elif isinstance(control, dict) and "speed" in control:
+            kwargs["speed"] = JetSpeed.build(control.get("speed"))
+
         base = existing or Jet(jet_id=jet_id)
         return replace(base, **kwargs)
 
@@ -426,6 +411,8 @@ class Jet:
             A list of Jet instances.
 
         """
+        if "control" in data and isinstance(data["control"], dict):
+            data = data["control"]
         existing_map = {j.jet_id: j for j in existing} if existing else {}
         jets: list[Jet] = []
         for key, value in data.items():
@@ -469,6 +456,15 @@ class Blower:
         status = data.get("status")
         if isinstance(status, dict) and "blower" in status:
             kwargs["is_on"] = status.get("blower", "off") not in ("off", "disable")
+
+        control = data.get("control")
+        if isinstance(control, str):
+            kwargs["is_on"] = control.lower() not in ("off", "disable")
+        elif isinstance(control, dict) and "blower" in control:
+            kwargs["is_on"] = str(control.get("blower")).lower() not in (
+                "off",
+                "disable",
+            )
 
         base = existing or Blower()
         return replace(base, **kwargs)
@@ -516,27 +512,11 @@ class LightZone:
 
         status = data.get("status")
         if isinstance(status, dict):
-            if "color" in status:
-                color_val = LightColor.build(status.get("color"))
-                kwargs["color"] = color_val
-                if "RGBstate" not in status and color_val != LightColor.CUSTOM:
-                    kwargs["rgb_state"] = "inactive"
-            if "lightWheel" in status:
-                kwargs["light_wheel"] = LightWheelMode.build(status.get("lightWheel"))
-            if "Intensity" in status:
-                intensity = int(status.get("Intensity", 0))
-                kwargs["intensity"] = intensity
-                kwargs["is_on"] = intensity > 0
-            if "loopSpeed" in status:
-                kwargs["loop_speed"] = int(status.get("loopSpeed", 0))
-            if "cRed" in status:
-                kwargs["c_red"] = int(status.get("cRed", 0))
-            if "cGreen" in status:
-                kwargs["c_green"] = int(status.get("cGreen", 0))
-            if "cBlue" in status:
-                kwargs["c_blue"] = int(status.get("cBlue", 0))
-            if "RGBstate" in status:
-                kwargs["rgb_state"] = str(status.get("RGBstate", "inactive")).lower()
+            kwargs.update(_parse_light_zone_status(status))
+
+        control = data.get("control")
+        if isinstance(control, dict):
+            kwargs.update(_parse_light_zone_control(control))
 
         base = existing or LightZone(zone_id=zone_id)
         zone = replace(base, **kwargs)
@@ -563,6 +543,8 @@ class LightZone:
             A list of LightZone instances.
 
         """
+        if "control" in data and isinstance(data["control"], dict):
+            data = data["control"]
         existing_map = {z.zone_id: z for z in existing} if existing else {}
         zones: list[LightZone] = []
         for key, value in data.items():
@@ -607,6 +589,12 @@ class LogoLight:
         if isinstance(status, dict) and "brightness" in status:
             kwargs["brightness"] = BrightnessLevel.build(status.get("brightness"))
 
+        control = data.get("control")
+        if isinstance(control, dict) and "brightness" in control:
+            kwargs["brightness"] = BrightnessLevel.build(control.get("brightness"))
+        elif isinstance(control, str):
+            kwargs["brightness"] = BrightnessLevel.build(control)
+
         base = existing or LogoLight()
         return replace(base, **kwargs)
 
@@ -642,6 +630,19 @@ class CleanCycle:
             if "vanishingAct" in status:
                 kwargs["vanishing_act"] = status.get("vanishingAct", "off") != "off"
 
+        control = data.get("control")
+        if isinstance(control, dict):
+            if "cleanCycle" in control:
+                kwargs["is_enabled"] = (
+                    str(control.get("cleanCycle")).lower() not in ("off", "disable")
+                )
+            if "vanishingAct" in control:
+                kwargs["vanishing_act"] = (
+                    str(control.get("vanishingAct")).lower() not in ("off", "disable")
+                )
+        elif isinstance(control, str):
+            kwargs["is_enabled"] = control.lower() not in ("off", "disable")
+
         base = existing or CleanCycle()
         return replace(base, **kwargs)
 
@@ -669,7 +670,19 @@ class SpaLock:
         kwargs: dict[str, object] = {}
         status = data.get("status")
         if isinstance(status, dict) and "spaLock" in status:
-            kwargs["is_locked"] = status.get("spaLock", "off") != "off"
+            kwargs["is_locked"] = status.get("spaLock", "off") not in (
+                "off",
+                "disable",
+            )
+
+        control = data.get("control")
+        if isinstance(control, dict) and "spaLock" in control:
+            kwargs["is_locked"] = str(control.get("spaLock")).lower() not in (
+                "off",
+                "disable",
+            )
+        elif isinstance(control, str):
+            kwargs["is_locked"] = control.lower() not in ("off", "disable")
 
         base = existing or SpaLock()
         return replace(base, **kwargs)
@@ -1126,6 +1139,129 @@ _SECTION_PARSERS: tuple[_SectionParser, ...] = (
     _SectionParser("FWIQ_Parameters", "freshwater_iq", FreshWaterIQ.from_dict),
     _SectionParser("test_data", "test_metrics", SpaTestData.from_dict),
 )
+
+
+def _parse_heater_temperatures(
+    status: dict[str, object], existing: Heater | None
+) -> dict[str, object]:
+    """Parse temperature and unit fields for the heater."""
+    kwargs: dict[str, object] = {}
+    if "setWaterTemperature" in status:
+        parsed_temp = _parse_temperature(status.get("setWaterTemperature"))
+        if parsed_temp is not None or existing is None:
+            kwargs["set_temperature"] = parsed_temp
+    if "currentWaterTemperature" in status:
+        parsed_current = _parse_temperature(status.get("currentWaterTemperature"))
+        if parsed_current is not None or existing is None:
+            kwargs["current_temperature"] = parsed_current
+    if "temperatureUnit" in status:
+        unit = TemperatureUnit.build(status.get("temperatureUnit"))
+        if unit != TemperatureUnit.UNKNOWN or existing is None:
+            kwargs["temperature_unit"] = unit
+    return kwargs
+
+
+def _parse_heater_status(
+    status: dict[str, object], existing: Heater | None
+) -> dict[str, object]:
+    """Parse status fields for the heater."""
+    kwargs: dict[str, object] = {}
+    if "heater" in status:
+        kwargs["is_on"] = status.get("heater", "off") != "off"
+    if "heaterLock" in status:
+        kwargs["heater_lock"] = status.get("heaterLock", "off") != "off"
+    if "heatpumpInstalled" in status:
+        kwargs["heatpump_installed"] = (
+            status.get("heatpumpInstalled", "notinstalled") != "notinstalled"
+        )
+    if "heatingMode" in status:
+        mode = HeatingMode.build(status.get("heatingMode"))
+        if mode not in (HeatingMode.UNKNOWN, HeatingMode.INVALID) or existing is None:
+            kwargs["heating_mode"] = mode
+    if "heaterCurrent" in status:
+        kwargs["heater_current"] = int(status.get("heaterCurrent", 0)) / 2560.0
+    if "heaterHours" in status:
+        kwargs["heater_on_seconds"] = int(status.get("heaterHours", 0)) // 256
+    kwargs.update(_parse_heater_temperatures(status, existing))
+    return kwargs
+
+
+def _parse_heater_control(
+    control: dict[str, object], existing: Heater | None
+) -> dict[str, object]:
+    """Parse control fields for the heater."""
+    kwargs: dict[str, object] = {}
+    if "temperatureABS" in control:
+        parsed_temp = _parse_temperature(control.get("temperatureABS"))
+        if parsed_temp is not None or existing is None:
+            kwargs["set_temperature"] = parsed_temp
+    if "heatingMode" in control:
+        mode = HeatingMode.build(control.get("heatingMode"))
+        if mode not in (HeatingMode.UNKNOWN, HeatingMode.INVALID) or existing is None:
+            kwargs["heating_mode"] = mode
+    if "temperatureLock" in control:
+        kwargs["heater_lock"] = control.get("temperatureLock") == "on"
+    return kwargs
+
+
+def _parse_light_zone_status(status: dict[str, object]) -> dict[str, object]:
+    """Parse status parameters for a light zone."""
+    kwargs: dict[str, object] = {}
+    if "color" in status:
+        color_val = LightColor.build(status.get("color"))
+        kwargs["color"] = color_val
+        if "RGBstate" not in status and color_val != LightColor.CUSTOM:
+            kwargs["rgb_state"] = "inactive"
+    if "lightWheel" in status:
+        kwargs["light_wheel"] = LightWheelMode.build(status.get("lightWheel"))
+    if "Intensity" in status:
+        intensity = int(status.get("Intensity", 0))
+        kwargs["intensity"] = intensity
+        kwargs["is_on"] = intensity > 0
+    if "loopSpeed" in status:
+        kwargs["loop_speed"] = int(status.get("loopSpeed", 0))
+    if "cRed" in status:
+        kwargs["c_red"] = int(status.get("cRed", 0))
+    if "cGreen" in status:
+        kwargs["c_green"] = int(status.get("cGreen", 0))
+    if "cBlue" in status:
+        kwargs["c_blue"] = int(status.get("cBlue", 0))
+    if "RGBstate" in status:
+        kwargs["rgb_state"] = str(status.get("RGBstate", "inactive")).lower()
+    return kwargs
+
+
+def _parse_light_zone_control(control: dict[str, object]) -> dict[str, object]:
+    """Parse control parameters for a light zone."""
+    kwargs: dict[str, object] = {}
+    if "color" in control:
+        color_val = LightColor.build(control.get("color"))
+        kwargs["color"] = color_val
+        if color_val != LightColor.CUSTOM:
+            kwargs["rgb_state"] = "inactive"
+    if "lightWheel" in control:
+        kwargs["light_wheel"] = LightWheelMode.build(control.get("lightWheel"))
+    if "IntensityAbs" in control:
+        intensity = int(control.get("IntensityAbs", 0))
+        kwargs["intensity"] = intensity
+        kwargs["is_on"] = intensity > 0
+    if "Intensity" in control:
+        val = str(control.get("Intensity")).lower()
+        if val == "off":
+            kwargs["intensity"] = 0
+            kwargs["is_on"] = False
+        elif val.isdigit():
+            intensity = int(val)
+            kwargs["intensity"] = intensity
+            kwargs["is_on"] = intensity > 0
+    if "rgbFactor" in control and isinstance(control["rgbFactor"], dict):
+        rgb = control["rgbFactor"]
+        kwargs["c_red"] = int(rgb.get("red", 0))
+        kwargs["c_green"] = int(rgb.get("green", 0))
+        kwargs["c_blue"] = int(rgb.get("blue", 0))
+        kwargs["rgb_state"] = "active"
+        kwargs["color"] = LightColor.CUSTOM
+    return kwargs
 
 
 def _parse_temperature(value: str | float | None) -> float | None:
