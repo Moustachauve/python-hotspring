@@ -7,12 +7,12 @@ in a structured format.
 import asyncio
 import os
 import sys
+import time
 
 # Add src to sys.path so we can import hotspring
 sys.path.append(os.path.join(os.getcwd(), "src"))
 
-import time
-
+# pylint: disable=wrong-import-position
 from hotspring import HotSpring
 from hotspring.exceptions import HotSpringError
 from hotspring.models import Spa
@@ -191,7 +191,7 @@ async def main() -> None:
         print(f"  1. Cold Sync (Tier 1 Status + Tier 2 Identity): {t_initial:.3f} s")
         speedup = (
             f"({t_initial / t_cached:.1f}x faster!)"
-            if t_cached > 0 and t_initial > t_cached
+            if 0 < t_cached < t_initial
             else ""
         )
         print(
