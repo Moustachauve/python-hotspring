@@ -387,9 +387,13 @@ class Jet:
 
         control = data.get("control")
         if isinstance(control, str):
-            kwargs["speed"] = JetSpeed.build(control)
+            speed = JetSpeed.build(control)
+            if speed != JetSpeed.UNKNOWN or existing is None:
+                kwargs["speed"] = speed
         elif isinstance(control, dict) and "speed" in control:
-            kwargs["speed"] = JetSpeed.build(control.get("speed"))
+            speed = JetSpeed.build(control.get("speed"))
+            if speed != JetSpeed.UNKNOWN or existing is None:
+                kwargs["speed"] = speed
 
         base = existing or Jet(jet_id=jet_id)
         return replace(base, **kwargs)
@@ -459,12 +463,23 @@ class Blower:
 
         control = data.get("control")
         if isinstance(control, str):
-            kwargs["is_on"] = control.lower() not in ("off", "disable")
-        elif isinstance(control, dict) and "blower" in control:
-            kwargs["is_on"] = str(control.get("blower")).lower() not in (
+            kwargs["is_on"] = control.lower() not in (
                 "off",
                 "disable",
+                "false",
+                "0",
+                "",
             )
+        elif isinstance(control, dict) and "blower" in control:
+            raw_blower = control.get("blower")
+            if raw_blower is not None:
+                kwargs["is_on"] = str(raw_blower).lower() not in (
+                    "off",
+                    "disable",
+                    "false",
+                    "0",
+                    "",
+                )
 
         base = existing or Blower()
         return replace(base, **kwargs)
@@ -519,12 +534,14 @@ class LightZone:
             kwargs.update(_parse_light_zone_control(control))
 
         base = existing or LightZone(zone_id=zone_id)
-        zone = replace(base, **kwargs)
-        if zone.rgb_state == "active" and (
-            (zone.c_red, zone.c_green, zone.c_blue) != (0, 0, 0)
-        ):
-            zone.color = LightColor.CUSTOM
-        return zone
+        merged_rgb_state = kwargs.get("rgb_state", base.rgb_state)
+        r = kwargs.get("c_red", base.c_red)
+        g = kwargs.get("c_green", base.c_green)
+        b = kwargs.get("c_blue", base.c_blue)
+        if merged_rgb_state == "active" and (r, g, b) != (0, 0, 0):
+            kwargs["color"] = LightColor.CUSTOM
+
+        return replace(base, **kwargs)
 
     @staticmethod
     def list_from_dict(
@@ -591,9 +608,13 @@ class LogoLight:
 
         control = data.get("control")
         if isinstance(control, dict) and "brightness" in control:
-            kwargs["brightness"] = BrightnessLevel.build(control.get("brightness"))
+            brightness = BrightnessLevel.build(control.get("brightness"))
+            if brightness != BrightnessLevel.UNKNOWN or existing is None:
+                kwargs["brightness"] = brightness
         elif isinstance(control, str):
-            kwargs["brightness"] = BrightnessLevel.build(control)
+            brightness = BrightnessLevel.build(control)
+            if brightness != BrightnessLevel.UNKNOWN or existing is None:
+                kwargs["brightness"] = brightness
 
         base = existing or LogoLight()
         return replace(base, **kwargs)
@@ -633,15 +654,33 @@ class CleanCycle:
         control = data.get("control")
         if isinstance(control, dict):
             if "cleanCycle" in control:
-                kwargs["is_enabled"] = (
-                    str(control.get("cleanCycle")).lower() not in ("off", "disable")
-                )
+                raw_cc = control.get("cleanCycle")
+                if raw_cc is not None:
+                    kwargs["is_enabled"] = str(raw_cc).lower() not in (
+                        "off",
+                        "disable",
+                        "false",
+                        "0",
+                        "",
+                    )
             if "vanishingAct" in control:
-                kwargs["vanishing_act"] = (
-                    str(control.get("vanishingAct")).lower() not in ("off", "disable")
-                )
+                raw_va = control.get("vanishingAct")
+                if raw_va is not None:
+                    kwargs["vanishing_act"] = str(raw_va).lower() not in (
+                        "off",
+                        "disable",
+                        "false",
+                        "0",
+                        "",
+                    )
         elif isinstance(control, str):
-            kwargs["is_enabled"] = control.lower() not in ("off", "disable")
+            kwargs["is_enabled"] = control.lower() not in (
+                "off",
+                "disable",
+                "false",
+                "0",
+                "",
+            )
 
         base = existing or CleanCycle()
         return replace(base, **kwargs)
@@ -677,12 +716,23 @@ class SpaLock:
 
         control = data.get("control")
         if isinstance(control, dict) and "spaLock" in control:
-            kwargs["is_locked"] = str(control.get("spaLock")).lower() not in (
+            raw_lock = control.get("spaLock")
+            if raw_lock is not None:
+                kwargs["is_locked"] = str(raw_lock).lower() not in (
+                    "off",
+                    "disable",
+                    "false",
+                    "0",
+                    "",
+                )
+        elif isinstance(control, str):
+            kwargs["is_locked"] = control.lower() not in (
                 "off",
                 "disable",
+                "false",
+                "0",
+                "",
             )
-        elif isinstance(control, str):
-            kwargs["is_locked"] = control.lower() not in ("off", "disable")
 
         base = existing or SpaLock()
         return replace(base, **kwargs)
@@ -1176,7 +1226,7 @@ def _parse_heater_status(
         )
     if "heatingMode" in status:
         mode = HeatingMode.build(status.get("heatingMode"))
-        if mode not in (HeatingMode.UNKNOWN, HeatingMode.INVALID) or existing is None:
+        if mode != HeatingMode.UNKNOWN or existing is None:
             kwargs["heating_mode"] = mode
     if "heaterCurrent" in status:
         kwargs["heater_current"] = int(status.get("heaterCurrent", 0)) / 2560.0
@@ -1197,10 +1247,18 @@ def _parse_heater_control(
             kwargs["set_temperature"] = parsed_temp
     if "heatingMode" in control:
         mode = HeatingMode.build(control.get("heatingMode"))
-        if mode not in (HeatingMode.UNKNOWN, HeatingMode.INVALID) or existing is None:
+        if mode != HeatingMode.UNKNOWN or existing is None:
             kwargs["heating_mode"] = mode
     if "temperatureLock" in control:
-        kwargs["heater_lock"] = control.get("temperatureLock") == "on"
+        raw_lock = control.get("temperatureLock")
+        if raw_lock is not None:
+            kwargs["heater_lock"] = str(raw_lock).lower() not in (
+                "off",
+                "disable",
+                "false",
+                "0",
+                "",
+            )
     return kwargs
 
 
@@ -1236,11 +1294,14 @@ def _parse_light_zone_control(control: dict[str, object]) -> dict[str, object]:
     kwargs: dict[str, object] = {}
     if "color" in control:
         color_val = LightColor.build(control.get("color"))
-        kwargs["color"] = color_val
-        if color_val != LightColor.CUSTOM:
-            kwargs["rgb_state"] = "inactive"
+        if color_val != LightColor.UNKNOWN:
+            kwargs["color"] = color_val
+            if color_val != LightColor.CUSTOM:
+                kwargs["rgb_state"] = "inactive"
     if "lightWheel" in control:
-        kwargs["light_wheel"] = LightWheelMode.build(control.get("lightWheel"))
+        wheel_mode = LightWheelMode.build(control.get("lightWheel"))
+        if wheel_mode != LightWheelMode.UNKNOWN:
+            kwargs["light_wheel"] = wheel_mode
     if "IntensityAbs" in control:
         intensity = int(control.get("IntensityAbs", 0))
         kwargs["intensity"] = intensity
