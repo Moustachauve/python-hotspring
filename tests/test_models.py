@@ -1149,6 +1149,7 @@ class TestSpa:  # pylint: disable=too-many-public-methods
             (" 97F", 97.0),
             (" 38C", 38.0),
             ("100F", 100.0),
+            (" F ", None),
         ],
     )
     def test_parse_temperature(
@@ -1156,3 +1157,145 @@ class TestSpa:  # pylint: disable=too-many-public-methods
     ) -> None:
         """Test temperature parsing from various input formats."""
         assert _parse_temperature(value) == expected
+
+
+class TestControlResponseParsing:
+    """Tests for parsing control response payloads from commands."""
+
+    def test_heater_control_payload(self) -> None:
+        """Test parsing heater control command response."""
+        existing = Heater(
+            set_temperature=100.0,
+            heating_mode=HeatingMode.AUTO_WITH_BOOST,
+            temperature_unit=TemperatureUnit.FAHRENHEIT,
+        )
+        # Control dict sets temp and lock
+        updated = Heater.from_dict(
+            {
+                "control": {
+                    "temperatureABS": "104",
+                    "heatingMode": "heatWithBoost",
+                    "temperatureLock": "on",
+                }
+            },
+            existing=existing,
+        )
+        assert updated.set_temperature == 104.0
+        assert updated.heating_mode == HeatingMode.HEAT_WITH_BOOST
+        assert updated.heater_lock is True
+        assert updated.temperature_unit == TemperatureUnit.FAHRENHEIT
+
+    def test_heater_invalid_mode_preserves_existing(self) -> None:
+        """Test that 'invalid' mode in response does not overwrite known mode."""
+        existing = Heater(heating_mode=HeatingMode.AUTO_WITH_BOOST)
+        updated = Heater.from_dict(
+            {"status": {"heatingMode": "invalid"}}, existing=existing
+        )
+        assert updated.heating_mode == HeatingMode.AUTO_WITH_BOOST
+
+    def test_jet_control_payload(self) -> None:
+        """Test parsing jet control responses."""
+        jet = Jet.from_dict(1, {"control": "highSpeed"})
+        assert jet.speed == JetSpeed.HIGH_SPEED
+
+        jet2 = Jet.from_dict(2, {"control": {"speed": "lowSpeed"}})
+        assert jet2.speed == JetSpeed.LOW_SPEED
+
+        # Nested in control dict
+        jets = Jet.list_from_dict(
+            {"control": {"JET1": {"control": "highSpeed"}, "JET2": {"control": "off"}}}
+        )
+        assert len(jets) == 2
+        assert jets[0].speed == JetSpeed.HIGH_SPEED
+        assert jets[1].speed == JetSpeed.OFF
+
+    def test_blower_control_payload(self) -> None:
+        """Test parsing blower control responses."""
+        blower_on = Blower.from_dict({"control": "on"})
+        assert blower_on.is_on is True
+
+        blower_off = Blower.from_dict({"control": "off"})
+        assert blower_off.is_on is False
+
+        blower_dict = Blower.from_dict({"control": {"blower": "on"}})
+        assert blower_dict.is_on is True
+
+    def test_light_zone_control_payload(self) -> None:
+        """Test parsing light zone control responses."""
+        # Color, wheel, and intensity
+        zone = LightZone.from_dict(
+            1,
+            {
+                "control": {
+                    "color": "BLUE",
+                    "lightWheel": "loopUp",
+                    "IntensityAbs": 4,
+                }
+            },
+        )
+        assert zone.color == LightColor.BLUE
+        assert zone.light_wheel == LightWheelMode.LOOP_UP
+        assert zone.intensity == 4
+        assert zone.is_on is True
+
+        # Intensity off
+        zone_off = LightZone.from_dict(1, {"control": {"Intensity": "off"}})
+        assert zone_off.intensity == 0
+        assert zone_off.is_on is False
+
+        # Intensity digit
+        zone_dim = LightZone.from_dict(1, {"control": {"Intensity": "3"}})
+        assert zone_dim.intensity == 3
+        assert zone_dim.is_on is True
+
+        # RGB factor
+        zone_rgb = LightZone.from_dict(
+            1,
+            {
+                "control": {
+                    "rgbFactor": {"red": 128, "green": 64, "blue": 255},
+                }
+            },
+        )
+        assert zone_rgb.color == LightColor.CUSTOM
+        assert zone_rgb.c_red == 128
+        assert zone_rgb.c_green == 64
+        assert zone_rgb.c_blue == 255
+        assert zone_rgb.rgb_state == "active"
+
+        # Nested in control dict
+        zones = LightZone.list_from_dict(
+            {"control": {"Zone1": {"control": {"IntensityAbs": 2}}}}
+        )
+        assert len(zones) == 1
+        assert zones[0].intensity == 2
+
+    def test_logo_light_control_payload(self) -> None:
+        """Test parsing logo light control responses."""
+        logo = LogoLight.from_dict({"control": "brightness_level_1"})
+        assert logo.brightness == BrightnessLevel.LEVEL_1
+
+        logo_dict = LogoLight.from_dict(
+            {"control": {"brightness": "brightness_level_2"}}
+        )
+        assert logo_dict.brightness == BrightnessLevel.LEVEL_2
+
+    def test_clean_cycle_control_payload(self) -> None:
+        """Test parsing clean cycle control responses."""
+        cc = CleanCycle.from_dict({"control": "on"})
+        assert cc.is_enabled is True
+
+        cc_dict = CleanCycle.from_dict(
+            {"control": {"cleanCycle": "off", "vanishingAct": "on"}}
+        )
+        assert cc_dict.is_enabled is False
+        assert cc_dict.vanishing_act is True
+
+    def test_spa_lock_control_payload(self) -> None:
+        """Test parsing spa lock control responses."""
+        lock = SpaLock.from_dict({"control": "on"})
+        assert lock.is_locked is True
+
+        lock_dict = SpaLock.from_dict({"control": {"spaLock": "off"}})
+        assert lock_dict.is_locked is False
+
