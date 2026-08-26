@@ -8,6 +8,7 @@ import pytest
 
 from hotspring import (
     BrightnessLevel,
+    EnergySavingMode,
     HeatingMode,
     JetSpeed,
     JetSpeedType,
@@ -406,6 +407,25 @@ class TestWaterCare:
         water = WaterCare.from_dict(status_response["waterCare"])  # type: ignore[arg-type]
         assert water == snapshot
 
+    def test_config_power_channels(self) -> None:
+        """Test parsing salt system power channels from config."""
+        wc_a = WaterCare.from_dict({"config": {"saltSystemPowerA": "enable"}})
+        assert wc_a.power_a is True
+        assert wc_a.power_b is False
+        assert wc_a.system_enabled is True
+
+        wc_b = WaterCare.from_dict({"config": {"saltSystemPowerB": "enable"}})
+        assert wc_b.power_a is False
+        assert wc_b.power_b is True
+        assert wc_b.system_enabled is True
+
+        wc_off = WaterCare.from_dict(
+            {"config": {"saltSystemPowerA": "disable", "saltSystemPowerB": "disable"}}
+        )
+        assert wc_off.power_a is False
+        assert wc_off.power_b is False
+        assert wc_off.system_enabled is False
+
 
 class TestFreshWaterIQ:
     """Tests for FreshWaterIQ model parsing."""
@@ -455,12 +475,14 @@ class TestEnergySaving:
         """Test EnergySaving is_enabled property and parsing."""
         s_off = EnergySaving.from_dict(1, {"status": {"mode": 0, "startHour": 0}})
         assert s_off.is_enabled is False
+        assert s_off.saving_mode == EnergySavingMode.OFF
 
         s_on = EnergySaving.from_dict(
             2,
             {"status": {"mode": 1, "startHour": 14, "startMinute": 30, "duration": 4}},
         )
         assert s_on.is_enabled is True
+        assert s_on.saving_mode == EnergySavingMode.ON
         assert s_on.start_hour == 14
         assert s_on.start_minute == 30
         assert s_on.duration == 4
@@ -479,12 +501,14 @@ class TestEnergySaving:
             },
         )
         assert s.is_enabled is True
+        assert s.saving_mode == EnergySavingMode.ON
         assert s.start_hour == 10
         assert s.start_minute == 15
         assert s.duration == 2
 
         s_off = EnergySaving.from_dict(1, {"control": {"mode": "off"}}, existing=s)
         assert s_off.is_enabled is False
+        assert s_off.saving_mode == EnergySavingMode.OFF
         assert s_off.start_hour == 10
 
     def test_list_from_control_dict(self) -> None:
@@ -499,6 +523,7 @@ class TestEnergySaving:
         assert len(schedules) == 1
         assert schedules[0].schedule_id == 1
         assert schedules[0].is_enabled is True
+        assert schedules[0].saving_mode == EnergySavingMode.ON
         assert schedules[0].start_hour == 8
 
 

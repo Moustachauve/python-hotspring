@@ -2,6 +2,7 @@
 
 from .const import (
     BrightnessLevel,
+    EnergySavingMode,
     HeatingMode,
     JetSpeed,
     JetSpeedType,
@@ -44,6 +45,7 @@ __all__ = [
     "ConnectionStatus",
     "Diagnostics",
     "EnergySaving",
+    "EnergySavingMode",
     "FreshWaterIQ",
     "Heater",
     "HeatingMode",
