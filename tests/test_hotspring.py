@@ -415,7 +415,7 @@ class TestUpdateDiagnostics:
         assert diag == snapshot
 
 
-class TestCommands:
+class TestCommands:  # pylint: disable=too-many-public-methods
     """Tests for control command methods."""
 
     async def test_set_temperature(self, aresponses: ResponsesMockServer) -> None:
