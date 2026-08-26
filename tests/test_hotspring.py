@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiohttp
 import pytest
@@ -23,6 +24,9 @@ from hotspring.const import (
     LightColor,
     LightWheelMode,
 )
+
+if TYPE_CHECKING:
+    from syrupy.assertion import SnapshotAssertion
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -79,18 +83,16 @@ def _add_update_mocks(
 class TestUpdate:
     """Tests for the update() method."""
 
-    async def test_update_success(self, aresponses: ResponsesMockServer) -> None:
+    async def test_update_success(
+        self, aresponses: ResponsesMockServer, snapshot: SnapshotAssertion
+    ) -> None:
         """Test successful full update."""
         _add_update_mocks(aresponses)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             spa = await client.update()
 
-        assert spa is not None
-        assert spa.heater.is_on is True
-        assert spa.heater.current_temperature == 100.0
-        assert spa.info.hostname == "ConnectedSpa_112233"
-        assert spa.connection_status.spa_connected is True
+        assert spa == snapshot
         assert client.spa is spa
 
     async def test_update_empty_response(self, aresponses: ResponsesMockServer) -> None:
@@ -356,7 +358,9 @@ class TestUpdate:
 class TestUpdateWaterCare:
     """Tests for the update_water_care() method."""
 
-    async def test_update_water_care(self, aresponses: ResponsesMockServer) -> None:
+    async def test_update_water_care(
+        self, aresponses: ResponsesMockServer, snapshot: SnapshotAssertion
+    ) -> None:
         """Test successful water care update."""
         _add_update_mocks(aresponses)
         aresponses.add(
@@ -370,8 +374,7 @@ class TestUpdateWaterCare:
             await client.update()
             fwiq = await client.update_water_care()
 
-        assert fwiq.ph == -1.0
-        assert fwiq.chlorine == -1.0
+        assert fwiq == snapshot
 
     async def test_update_water_care_without_update(
         self, aresponses: ResponsesMockServer
@@ -392,7 +395,9 @@ class TestUpdateWaterCare:
 class TestUpdateDiagnostics:
     """Tests for the update_diagnostics() method."""
 
-    async def test_update_diagnostics(self, aresponses: ResponsesMockServer) -> None:
+    async def test_update_diagnostics(
+        self, aresponses: ResponsesMockServer, snapshot: SnapshotAssertion
+    ) -> None:
         """Test successful diagnostics update."""
         _add_update_mocks(aresponses)
         aresponses.add(
@@ -406,7 +411,7 @@ class TestUpdateDiagnostics:
             await client.update()
             diag = await client.update_diagnostics()
 
-        assert diag.heater_power == "60"
+        assert diag == snapshot
 
 
 class TestCommands:
