@@ -52,9 +52,16 @@ def print_heater_and_jets(s: Spa) -> None:
     print("  JETS & BLOWER")
     print("=" * 20)
     for jet in s.jets:
+        supported = "/".join(sp.value for sp in jet.supported_speeds)
+        extra = ""
+        if jet.current > 0:
+            extra += f" Current={jet.current:.2f}A"
+        if jet.concurrent_mode:
+            extra += " Concurrent=True"
         print(
-            f"Jet {jet.jet_id:1}: Speed={jet.speed.value:10} "
-            f"Enabled={jet.is_enabled!s:5} Runtime={jet.on_seconds}s"
+            f"Jet {jet.jet_id:1}: Available={jet.is_available!s:5} "
+            f"SpeedType={jet.speed_type.value:11} State={jet.speed.value:10} "
+            f"Supported=[{supported}] Runtime={jet.on_seconds}s{extra}"
         )
     print(
         f"Blower: Status={'ON' if s.blower.is_on else 'OFF':3} "

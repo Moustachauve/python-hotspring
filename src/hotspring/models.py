@@ -15,6 +15,7 @@ from .const import (
     BrightnessLevel,
     HeatingMode,
     JetSpeed,
+    JetSpeedType,
     LightColor,
     LightWheelMode,
     SpaBrand,
@@ -350,8 +351,40 @@ class Jet:
 
     jet_id: int
     speed: JetSpeed = JetSpeed.OFF
+    speed_type: JetSpeedType = JetSpeedType.UNKNOWN
     is_enabled: bool = True
+    concurrent_mode: bool = False
+    current: float = 0.0
     on_seconds: int = 0
+
+    @property
+    def is_available(self) -> bool:
+        """Return True if the jet is available on the spa."""
+        return self.is_enabled
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if the jet pump is currently running."""
+        return self.speed not in (JetSpeed.OFF, JetSpeed.UNKNOWN)
+
+    @property
+    def is_single_speed(self) -> bool:
+        """Return True if the jet is configured as single-speed."""
+        return self.speed_type == JetSpeedType.SINGLE_SPEED
+
+    @property
+    def is_dual_speed(self) -> bool:
+        """Return True if the jet is configured as dual-speed."""
+        return self.speed_type == JetSpeedType.DUAL_SPEED
+
+    @property
+    def supported_speeds(self) -> list[JetSpeed]:
+        """Return the list of supported speeds for this jet."""
+        if not self.is_enabled:
+            return [JetSpeed.OFF]
+        if self.is_dual_speed:
+            return [JetSpeed.OFF, JetSpeed.LOW_SPEED, JetSpeed.HIGH_SPEED]
+        return [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
 
     @staticmethod
     def from_dict(
@@ -376,14 +409,25 @@ class Jet:
         config = data.get("config")
         if isinstance(config, dict):
             kwargs["is_enabled"] = config.get(f"JET{jet_id}", "enable") != "disable"
+            if "speed" in config:
+                kwargs["speed_type"] = JetSpeedType.build(config.get("speed"))
+            elif jet_id == 3 and kwargs["is_enabled"]:
+                # Jet 3 hardware is fixed single-speed if enabled
+                kwargs["speed_type"] = JetSpeedType.SINGLE_SPEED
+            if "concurrent" in config:
+                kwargs["concurrent_mode"] = (
+                    config.get("concurrent", "disable") != "disable"
+                )
 
         status = data.get("status")
         if isinstance(status, dict):
             if "speed" in status:
                 kwargs["speed"] = JetSpeed.build(status.get("speed"))
+            if "current" in status:
+                kwargs["current"] = int(status.get("current", 0)) / 2560.0
             on_sec_key = f"jet_{jet_id}_ON_sec"
             if on_sec_key in status:
-                kwargs["on_seconds"] = int(status.get(on_sec_key, 0)) // 256
+                kwargs["on_seconds"] = max(0, int(status.get(on_sec_key, 0))) // 256
 
         control = data.get("control")
         if isinstance(control, str):

@@ -75,6 +75,35 @@ class JetSpeed(Enum):
 _JET_SPEED_MAP: dict[str, JetSpeed] = {s.value: s for s in JetSpeed}
 
 
+class JetSpeedType(Enum):
+    """Configured speed capability of a jet pump."""
+
+    UNKNOWN = "unknown"
+    SINGLE_SPEED = "singleSpeed"
+    DUAL_SPEED = "dualSpeed"
+
+    @classmethod
+    def build(cls, value: str | None) -> JetSpeedType:
+        """Parse a raw API string into a JetSpeedType.
+
+        Args:
+        ----
+            value: The raw speed configuration string from the API, or None.
+
+        Returns:
+        -------
+            The matching JetSpeedType, or JetSpeedType.UNKNOWN for
+            unrecognized values.
+
+        """
+        if value is None:
+            return cls.UNKNOWN
+        return _JET_SPEED_TYPE_MAP.get(value, cls.UNKNOWN)
+
+
+_JET_SPEED_TYPE_MAP: dict[str, JetSpeedType] = {t.value: t for t in JetSpeedType}
+
+
 class LightColor(Enum):
     """Color setting for a spa light zone.
 
