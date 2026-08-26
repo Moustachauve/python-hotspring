@@ -13,6 +13,8 @@ import backoff
 from yarl import URL
 
 from .const import (
+    _BRIGHTNESS_TO_WIRE,
+    VALID_ENERGY_SAVING_SCHEDULE_IDS,
     BrightnessLevel,
     HeatingMode,
     JetSpeed,
@@ -621,19 +623,20 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         value = "on" if enabled else "off"
         await self._send_command({"cleanCycle": {"control": {"vanishingAct": value}}})
 
-    async def set_water_care_boost(  # pylint: disable=unused-argument
-        self,
-        *,
-        enabled: bool = True,  # noqa: ARG002
-    ) -> None:
+    async def toggle_water_care_boost(self) -> None:
         """Trigger or toggle the water care chlorine boost.
 
-        Args:
+        Note:
         ----
-            enabled: Kept for API symmetry (the underlying firmware toggles boost).
+            The underlying ESP32 firmware endpoint only supports toggling
+            the boost state via ``{"waterCare": {"control": {"boost": "toggle"}}}``.
 
         """
         await self._send_command({"waterCare": {"control": {"boost": "toggle"}}})
+
+    async def set_water_care_boost(self) -> None:
+        """Alias for toggle_water_care_boost."""
+        await self.toggle_water_care_boost()
 
     async def set_water_care_level(self, level: int) -> None:
         """Set the salt water care cartridge output level (0-10).
@@ -693,29 +696,20 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             ValueError: If the brightness level is unrecognized.
 
         """
-        if isinstance(level, BrightnessLevel):
-            if level == BrightnessLevel.LEVEL_1:
-                val_str = "1"
-            elif level == BrightnessLevel.LEVEL_2:
-                val_str = "2"
-            elif level == BrightnessLevel.LEVEL_3:
-                val_str = "3"
-            else:
-                val_str = "auto"
-        else:
-            s = str(level).strip().lower()
-            if s in ("1", "brightness_level_1"):
-                val_str = "1"
-            elif s in ("2", "brightness_level_2"):
-                val_str = "2"
-            elif s in ("3", "brightness_level_3"):
-                val_str = "3"
-            elif s == "auto":
-                val_str = "auto"
-            else:
-                msg = f"Invalid logo light brightness level: {level}"
-                raise ValueError(msg)
-        await self._send_command({"logoLight": {"control": val_str}})
+        brightness = (
+            level
+            if isinstance(level, BrightnessLevel)
+            else BrightnessLevel.build(level)
+        )
+        if (
+            brightness == BrightnessLevel.UNKNOWN
+            or brightness not in _BRIGHTNESS_TO_WIRE
+        ):
+            msg = f"Invalid logo light brightness level: {level}"
+            raise ValueError(msg)
+
+        wire_val = _BRIGHTNESS_TO_WIRE[brightness]
+        await self._send_command({"logoLight": {"control": wire_val}})
 
     async def set_energy_saving_schedule(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
@@ -741,8 +735,11 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             ValueError: If schedule_id or time/duration parameters are invalid.
 
         """
-        if schedule_id not in (1, 2):
-            msg = f"Schedule ID must be 1 or 2, got {schedule_id}"
+        if schedule_id not in VALID_ENERGY_SAVING_SCHEDULE_IDS:
+            msg = (
+                f"Schedule ID must be one of {VALID_ENERGY_SAVING_SCHEDULE_IDS}, "
+                f"got {schedule_id}"
+            )
             raise ValueError(msg)
         if not 0 <= start_hour <= 23:
             msg = f"start_hour must be between 0 and 23, got {start_hour}"
@@ -754,6 +751,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = f"duration must be between 1 and 24, got {duration}"
             raise ValueError(msg)
 
+        # Note: The ESP32 HNA firmware energySavings handler expects startHour,
+        # startMinute, and duration formatted as strings in the control object.
         mode_val = "on" if enabled else "off"
         await self._send_command(
             {
@@ -797,6 +796,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = f"start_minute must be between 0 and 59, got {start_minute}"
             raise ValueError(msg)
 
+        # Note: Unlike energySavings, the ESP32 HNA cleanCycleTimer endpoint
+        # parses startHour and startMinute as raw integers.
         clean_timer = "enable" if enabled else "disable"
         await self._send_command(
             {

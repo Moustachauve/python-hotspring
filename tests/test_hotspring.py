@@ -780,7 +780,7 @@ class TestCommands:
             assert client.spa.clean_cycle.vanishing_act is True
 
     async def test_set_water_care_boost(self, aresponses: ResponsesMockServer) -> None:
-        """Test triggering water care boost."""
+        """Test triggering/toggling water care boost."""
         _add_update_mocks(aresponses)
 
         async def handler(request: aiohttp.web.Request) -> Response:
@@ -792,10 +792,13 @@ class TestCommands:
             )
 
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             assert client.spa is not None
+            await client.toggle_water_care_boost()
+            assert client.spa.water_care.boost_active is True
             await client.set_water_care_boost()
             assert client.spa.water_care.boost_active is True
 
@@ -858,6 +861,8 @@ class TestCommands:
             await client.update()
             assert client.spa is not None
             await client.set_salt_system_power(power_a=True, power_b=False)
+            assert client.spa.water_care.power_a is True
+            assert client.spa.water_care.power_b is False
             assert client.spa.water_care.system_enabled is True
 
             with pytest.raises(ValueError, match="At least one of power_a or power_b"):
@@ -879,6 +884,7 @@ class TestCommands:
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
@@ -886,6 +892,7 @@ class TestCommands:
             await client.set_logo_light(BrightnessLevel.LEVEL_1)
             await client.set_logo_light(BrightnessLevel.LEVEL_2)
             await client.set_logo_light(BrightnessLevel.LEVEL_3)
+            await client.set_logo_light(BrightnessLevel.AUTO)
             await client.set_logo_light("auto")
             await client.set_logo_light(2)
 
@@ -893,6 +900,7 @@ class TestCommands:
             {"logoLight": {"control": "1"}},
             {"logoLight": {"control": "2"}},
             {"logoLight": {"control": "3"}},
+            {"logoLight": {"control": "auto"}},
             {"logoLight": {"control": "auto"}},
             {"logoLight": {"control": "2"}},
         ]
@@ -907,6 +915,8 @@ class TestCommands:
             await client.update()
             with pytest.raises(ValueError, match="Invalid logo light"):
                 await client.set_logo_light("invalid_level")
+            with pytest.raises(ValueError, match="Invalid logo light"):
+                await client.set_logo_light(BrightnessLevel.UNKNOWN)
 
     async def test_set_energy_saving_schedule(
         self, aresponses: ResponsesMockServer
@@ -968,7 +978,7 @@ class TestCommands:
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
-            with pytest.raises(ValueError, match="Schedule ID must be 1 or 2"):
+            with pytest.raises(ValueError, match="Schedule ID must be one of"):
                 await client.set_energy_saving_schedule(
                     3, enabled=True, start_hour=0, start_minute=0, duration=1
                 )

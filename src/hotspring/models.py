@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from .const import (
     BrightnessLevel,
+    EnergySavingMode,
     HeatingMode,
     JetSpeed,
     JetSpeedType,
@@ -126,6 +127,9 @@ class Spa:
             )
             updated.add("energy_savings")
 
+        # Handle cleanCycleTimer (POST /spaManager command echo for the 24h clean timer)
+        # Note: 'cleanCycle' key provides runtime cycle status from /status,
+        # whereas 'cleanCycleTimer' provides recurring timer schedule settings.
         if "cleanCycleTimer" in data and isinstance(data["cleanCycleTimer"], dict):
             self.clean_cycle = CleanCycle.from_dict(
                 data["cleanCycleTimer"], existing=self.clean_cycle
@@ -755,6 +759,8 @@ class WaterCare:  # pylint: disable=too-many-instance-attributes
     one_twenty_day_timer: int = 0
     level: int = 0
     system_enabled: bool = False
+    power_a: bool = False
+    power_b: bool = False
     ace_mode: str = "inactive"
     boost_active: bool = False
     salt_value: int = 0
@@ -781,10 +787,8 @@ class WaterCare:  # pylint: disable=too-many-instance-attributes
             kwargs.update(_parse_water_care_status(status))
 
         config = data.get("config")
-        if isinstance(config, dict) and "saltSystemPowerA" in config:
-            kwargs["system_enabled"] = (
-                config.get("saltSystemPowerA", "disable") == "enable"
-            )
+        if isinstance(config, dict):
+            kwargs.update(_parse_water_care_config(config))
 
         control = data.get("control")
         if isinstance(control, dict):
@@ -882,7 +886,12 @@ class EnergySaving:
     @property
     def is_enabled(self) -> bool:
         """Return True if the energy saving schedule is active."""
-        return self.mode != 0
+        return self.mode == 1
+
+    @property
+    def saving_mode(self) -> EnergySavingMode:
+        """Return the EnergySavingMode enum representation."""
+        return EnergySavingMode.build(self.mode)
 
     @staticmethod
     def from_dict(
@@ -933,11 +942,14 @@ class EnergySaving:
             A list of EnergySaving instances.
 
         """
-        if "control" in data and isinstance(data["control"], dict):
-            data = data["control"]
+        items = (
+            data["control"]
+            if "control" in data and isinstance(data["control"], dict)
+            else data
+        )
         existing_map = {s.schedule_id: s for s in existing} if existing else {}
         schedules: list[EnergySaving] = []
-        for key, value in data.items():
+        for key, value in items.items():
             if key.startswith("energySaving") and isinstance(value, dict):
                 try:
                     schedule_id = int(key[12:])
@@ -1196,7 +1208,18 @@ _SECTION_PARSERS: tuple[_SectionParser, ...] = (
 
 def _is_truthy(value: object) -> bool:
     """Return True if a string or raw value represents an enabled/truthy state."""
-    return str(value).lower() not in ("off", "disable", "false", "0", "")
+    if value is None or value is False:
+        return False
+    return str(value).strip().lower() not in (
+        "off",
+        "disable",
+        "false",
+        "0",
+        "inactive",
+        "",
+        "none",
+        "null",
+    )
 
 
 def _parse_heater_temperatures(status: dict[str, object]) -> dict[str, object]:
@@ -1382,15 +1405,10 @@ def _parse_clean_cycle_control(control: dict[str, object] | str) -> dict[str, ob
 
 
 def _parse_clean_cycle_timer(data: dict[str, object]) -> dict[str, object]:
-    """Parse clean cycle timer parameters."""
+    """Parse clean cycle timer parameters from command echo payload."""
     kwargs: dict[str, object] = {}
     if "cleanTimer" in data:
-        kwargs["clean_timer_enabled"] = data.get("cleanTimer") in (
-            "enable",
-            "on",
-            "true",
-            True,
-        )
+        kwargs["clean_timer_enabled"] = _is_truthy(data.get("cleanTimer"))
     if "startHour" in data:
         with contextlib.suppress(ValueError, TypeError):
             kwargs["start_hour"] = int(str(data["startHour"]))
@@ -1414,13 +1432,25 @@ def _parse_water_care_status(status: dict[str, object]) -> dict[str, object]:
     if "level" in status:
         kwargs["level"] = int(status.get("level", 0))
     if "SystemEnable" in status:
-        kwargs["system_enabled"] = status.get("SystemEnable", "disable") == "enable"
+        kwargs["system_enabled"] = _is_truthy(status.get("SystemEnable"))
     if "AceMode" in status:
         kwargs["ace_mode"] = str(status.get("AceMode", "inactive"))
     if "boost" in status:
-        kwargs["boost_active"] = status.get("boost", "inactive") != "inactive"
+        kwargs["boost_active"] = _is_truthy(status.get("boost"))
     if "saltValue" in status:
         kwargs["salt_value"] = int(status.get("saltValue", 0))
+    return kwargs
+
+
+def _parse_water_care_config(config: dict[str, object]) -> dict[str, object]:
+    """Parse config fields for water care (such as salt system power channels)."""
+    kwargs: dict[str, object] = {}
+    if "saltSystemPowerA" in config:
+        kwargs["power_a"] = _is_truthy(config.get("saltSystemPowerA"))
+    if "saltSystemPowerB" in config:
+        kwargs["power_b"] = _is_truthy(config.get("saltSystemPowerB"))
+    if "power_a" in kwargs or "power_b" in kwargs:
+        kwargs["system_enabled"] = bool(kwargs.get("power_a") or kwargs.get("power_b"))
     return kwargs
 
 
@@ -1431,12 +1461,7 @@ def _parse_water_care_control(control: dict[str, object]) -> dict[str, object]:
         with contextlib.suppress(ValueError, TypeError):
             kwargs["level"] = int(str(control["level"]))
     if "boost" in control:
-        kwargs["boost_active"] = control.get("boost") in (
-            "active",
-            "on",
-            "true",
-            True,
-        )
+        kwargs["boost_active"] = _is_truthy(control.get("boost"))
     return kwargs
 
 

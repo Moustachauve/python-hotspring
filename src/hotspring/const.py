@@ -182,6 +182,7 @@ class BrightnessLevel(Enum):
     """
 
     UNKNOWN = "unknown"
+    AUTO = "auto"
     LEVEL_1 = "brightness_level_1"
     LEVEL_2 = "brightness_level_2"
     LEVEL_3 = "brightness_level_3"
@@ -212,8 +213,39 @@ _BRIGHTNESS_MAP.update(
         "1": BrightnessLevel.LEVEL_1,
         "2": BrightnessLevel.LEVEL_2,
         "3": BrightnessLevel.LEVEL_3,
+        "auto": BrightnessLevel.AUTO,
     }
 )
+
+_BRIGHTNESS_TO_WIRE: dict[BrightnessLevel, str] = {
+    BrightnessLevel.LEVEL_1: "1",
+    BrightnessLevel.LEVEL_2: "2",
+    BrightnessLevel.LEVEL_3: "3",
+    BrightnessLevel.AUTO: "auto",
+}
+
+MAX_ENERGY_SAVING_SCHEDULES = 2
+VALID_ENERGY_SAVING_SCHEDULE_IDS = (1, 2)
+
+
+class EnergySavingMode(Enum):
+    """Energy saving schedule mode."""
+
+    UNKNOWN = "unknown"
+    OFF = "off"
+    ON = "on"
+
+    @classmethod
+    def build(cls, value: object) -> EnergySavingMode:
+        """Parse raw mode from API into EnergySavingMode."""
+        if value is None:
+            return cls.UNKNOWN
+        val_str = str(value).strip().lower()
+        if val_str in ("1", "on", "enable", "true"):
+            return cls.ON
+        if val_str in ("0", "off", "disable", "false"):
+            return cls.OFF
+        return cls.UNKNOWN
 
 
 class TemperatureUnit(Enum):
