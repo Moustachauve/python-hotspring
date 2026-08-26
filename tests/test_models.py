@@ -8,6 +8,7 @@ from hotspring import (
     BrightnessLevel,
     HeatingMode,
     JetSpeed,
+    JetSpeedType,
     LightColor,
     LightWheelMode,
     SpaBrand,
@@ -66,6 +67,16 @@ class TestEnums:
     def test_jet_speed_unknown(self) -> None:
         """Test parsing an unknown jet speed value."""
         assert JetSpeed.build("warp") == JetSpeed.UNKNOWN
+
+    def test_jet_speed_type_known(self) -> None:
+        """Test parsing known jet speed types."""
+        assert JetSpeedType.build("singleSpeed") == JetSpeedType.SINGLE_SPEED
+        assert JetSpeedType.build("dualSpeed") == JetSpeedType.DUAL_SPEED
+
+    def test_jet_speed_type_unknown(self) -> None:
+        """Test parsing unknown or None jet speed types."""
+        assert JetSpeedType.build("tripleSpeed") == JetSpeedType.UNKNOWN
+        assert JetSpeedType.build(None) == JetSpeedType.UNKNOWN
 
     def test_light_color_known(self) -> None:
         """Test parsing a known light color (case-insensitive)."""
@@ -174,19 +185,39 @@ class TestJet:
         jets = Jet.list_from_dict(status_response["JET"])  # type: ignore[arg-type]
         assert len(jets) == 3
 
-        # JET1 should be enabled and running
+        # JET1 should be dualSpeed, enabled, and running
         assert jets[0].jet_id == 1
         assert jets[0].speed == JetSpeed.HIGH_SPEED
+        assert jets[0].speed_type == JetSpeedType.DUAL_SPEED
+        assert jets[0].is_enabled is True
+        assert jets[0].is_available is True
+        assert jets[0].is_on is True
+        assert jets[0].is_dual_speed is True
+        assert jets[0].is_single_speed is False
+        assert jets[0].supported_speeds == [
+            JetSpeed.OFF,
+            JetSpeed.LOW_SPEED,
+            JetSpeed.HIGH_SPEED,
+        ]
         assert jets[0].on_seconds == 1061668
 
-        # JET2 should be enabled (no JET2 key = default enable) and off
+        # JET2 should be singleSpeed, enabled, and off
         assert jets[1].jet_id == 2
         assert jets[1].is_enabled is True
+        assert jets[1].is_available is True
+        assert jets[1].is_on is False
         assert jets[1].speed == JetSpeed.OFF
+        assert jets[1].speed_type == JetSpeedType.SINGLE_SPEED
+        assert jets[1].is_dual_speed is False
+        assert jets[1].is_single_speed is True
+        assert jets[1].supported_speeds == [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
 
         # JET3 should be disabled
         assert jets[2].jet_id == 3
         assert jets[2].is_enabled is False
+        assert jets[2].is_available is False
+        assert jets[2].is_on is False
+        assert jets[2].supported_speeds == [JetSpeed.OFF]
 
     def test_from_empty_dict(self) -> None:
         """Test parsing jets from empty dict."""
@@ -202,6 +233,39 @@ class TestJet:
         jets = Jet.list_from_dict(data)  # type: ignore[arg-type]
         assert jets[0].jet_id == 1
         assert jets[1].jet_id == 3
+
+    def test_jet3_concurrent_and_current(self) -> None:
+        """Test parsing Jet 3 concurrent mode and electrical current."""
+        jet = Jet.from_dict(
+            3,
+            {
+                "config": {"JET3": "enable", "concurrent": "enable"},
+                "status": {"speed": "highSpeed", "current": 9216, "jet_3_ON_sec": 512},
+            },
+        )
+        assert jet.jet_id == 3
+        assert jet.is_enabled is True
+        assert jet.is_available is True
+        assert jet.is_on is True
+        assert jet.speed == JetSpeed.HIGH_SPEED
+        assert jet.speed_type == JetSpeedType.SINGLE_SPEED
+        assert jet.concurrent_mode is True
+        assert jet.current == 3.6  # 9216 / 2560
+        assert jet.on_seconds == 2
+        assert jet.supported_speeds == [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
+
+    def test_jet_negative_runtime_overflow(self) -> None:
+        """Test graceful handling of negative signed integer overflow in runtime."""
+        jet = Jet.from_dict(
+            1,
+            {
+                "config": {"speed": "dualSpeed"},
+                "status": {"speed": "off", "jet_1_ON_sec": -1568323328},
+            },
+        )
+        assert jet.on_seconds == 0
+        assert jet.is_on is False
+        assert jet.speed_type == JetSpeedType.DUAL_SPEED
 
 
 class TestBlower:
