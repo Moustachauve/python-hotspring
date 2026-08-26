@@ -19,6 +19,7 @@ from hotspring import (
     HotSpringNotReadyError,
 )
 from hotspring.const import (
+    BrightnessLevel,
     HeatingMode,
     JetSpeed,
     LightColor,
@@ -695,6 +696,353 @@ class TestCommands:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             await client.set_blower(on=True)
+
+    async def test_set_spa_lock(self, aresponses: ResponsesMockServer) -> None:
+        """Test locking and unlocking spa controls."""
+        _add_update_mocks(aresponses)
+
+        async def handler_on(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"spaLock": {"control": "on"}}
+            return Response(
+                status=200,
+                text=json.dumps({"spaLock": {"status": {"spaLock": "on"}}}),
+            )
+
+        async def handler_off(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"spaLock": {"control": "off"}}
+            return Response(
+                status=200,
+                text=json.dumps({"spaLock": {"status": {"spaLock": "off"}}}),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler_on)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler_off)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_spa_lock(locked=True)
+            assert client.spa.spa_lock.is_locked is True
+            await client.set_spa_lock(locked=False)
+            assert client.spa.spa_lock.is_locked is False
+
+    async def test_set_temperature_lock(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting temperature lock and its alias set_heater_lock."""
+        _add_update_mocks(aresponses)
+
+        async def handler_on(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"heater": {"control": {"temperatureLock": "on"}}}
+            return Response(
+                status=200,
+                text=json.dumps({"heater": {"status": {"heaterLock": "on"}}}),
+            )
+
+        async def handler_off(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"heater": {"control": {"temperatureLock": "off"}}}
+            return Response(
+                status=200,
+                text=json.dumps({"heater": {"status": {"heaterLock": "off"}}}),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler_on)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler_off)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_temperature_lock(locked=True)
+            assert client.spa.heater.heater_lock is True
+            await client.set_heater_lock(locked=False)
+            assert client.spa.heater.heater_lock is False
+
+    async def test_set_vanishing_act(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting vanishing act."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"cleanCycle": {"control": {"vanishingAct": "on"}}}
+            return Response(
+                status=200,
+                text=json.dumps({"cleanCycle": {"status": {"vanishingAct": "on"}}}),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_vanishing_act(enabled=True)
+            assert client.spa.clean_cycle.vanishing_act is True
+
+    async def test_set_water_care_boost(self, aresponses: ResponsesMockServer) -> None:
+        """Test triggering water care boost."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"waterCare": {"control": {"boost": "toggle"}}}
+            return Response(
+                status=200,
+                text=json.dumps({"waterCare": {"status": {"boost": "active"}}}),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_water_care_boost()
+            assert client.spa.water_care.boost_active is True
+
+    async def test_set_water_care_level(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting water care cartridge output level."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {"waterCare": {"control": {"level": "7"}}}
+            return Response(
+                status=200,
+                text=json.dumps({"waterCare": {"status": {"level": 7}}}),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_water_care_level(7)
+            assert client.spa.water_care.level == 7
+
+            with pytest.raises(ValueError, match="between 0 and 10"):
+                await client.set_water_care_level(-1)
+            with pytest.raises(ValueError, match="between 0 and 10"):
+                await client.set_water_care_level(11)
+
+    async def test_set_salt_system_power(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting salt system power configuration."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {
+                "waterCare": {
+                    "config": {
+                        "saltSystemPowerA": "enable",
+                        "saltSystemPowerB": "disable",
+                    }
+                }
+            }
+            return Response(
+                status=200,
+                text=json.dumps(
+                    {
+                        "waterCare": {
+                            "config": {
+                                "saltSystemPowerA": "enable",
+                                "saltSystemPowerB": "disable",
+                            }
+                        }
+                    }
+                ),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_salt_system_power(power_a=True, power_b=False)
+            assert client.spa.water_care.system_enabled is True
+
+            with pytest.raises(ValueError, match="At least one of power_a or power_b"):
+                await client.set_salt_system_power()
+
+    async def test_set_logo_light(self, aresponses: ResponsesMockServer) -> None:
+        """Test setting logo light brightness with enums and strings."""
+        _add_update_mocks(aresponses)
+
+        calls = []
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            calls.append(data)
+            return Response(status=200, text='{"status": "ok"}')
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            await client.set_logo_light(BrightnessLevel.LEVEL_1)
+            await client.set_logo_light(BrightnessLevel.LEVEL_2)
+            await client.set_logo_light(BrightnessLevel.LEVEL_3)
+            await client.set_logo_light("auto")
+            await client.set_logo_light(2)
+
+        assert calls == [
+            {"logoLight": {"control": "1"}},
+            {"logoLight": {"control": "2"}},
+            {"logoLight": {"control": "3"}},
+            {"logoLight": {"control": "auto"}},
+            {"logoLight": {"control": "2"}},
+        ]
+
+    async def test_set_logo_light_invalid(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test setting invalid logo light brightness raises ValueError."""
+        _add_update_mocks(aresponses)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(ValueError, match="Invalid logo light"):
+                await client.set_logo_light("invalid_level")
+
+    async def test_set_energy_saving_schedule(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test configuring energy saving schedule."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {
+                "energySavings": {
+                    "energySaving1": {
+                        "control": {
+                            "mode": "on",
+                            "startHour": "14",
+                            "startMinute": "30",
+                            "duration": "4",
+                        }
+                    }
+                }
+            }
+            return Response(
+                status=200,
+                text=json.dumps(
+                    {
+                        "energySavings": {
+                            "energySaving1": {
+                                "status": {
+                                    "mode": 1,
+                                    "startHour": 14,
+                                    "startMinute": 30,
+                                    "duration": 4,
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_energy_saving_schedule(
+                1, enabled=True, start_hour=14, start_minute=30, duration=4
+            )
+            s1 = client.spa.energy_savings[0]
+            assert s1.is_enabled is True
+            assert s1.start_hour == 14
+            assert s1.start_minute == 30
+            assert s1.duration == 4
+
+    async def test_set_energy_saving_schedule_validation(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test energy saving schedule input validation."""
+        _add_update_mocks(aresponses)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(ValueError, match="Schedule ID must be 1 or 2"):
+                await client.set_energy_saving_schedule(
+                    3, enabled=True, start_hour=0, start_minute=0, duration=1
+                )
+            with pytest.raises(ValueError, match="start_hour must be between 0 and 23"):
+                await client.set_energy_saving_schedule(
+                    1, enabled=True, start_hour=24, start_minute=0, duration=1
+                )
+            msg_minute = "start_minute must be between 0 and 59"
+            with pytest.raises(ValueError, match=msg_minute):
+                await client.set_energy_saving_schedule(
+                    1, enabled=True, start_hour=10, start_minute=60, duration=1
+                )
+            with pytest.raises(ValueError, match="duration must be between 1 and 24"):
+                await client.set_energy_saving_schedule(
+                    1, enabled=True, start_hour=10, start_minute=0, duration=0
+                )
+
+    async def test_set_clean_cycle_schedule(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test configuring clean cycle recurring schedule."""
+        _add_update_mocks(aresponses)
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            data = await request.json()
+            assert data == {
+                "cleanCycleTimer": {
+                    "cleanTimer": "enable",
+                    "startHour": 18,
+                    "startMinute": 45,
+                }
+            }
+            return Response(
+                status=200,
+                text=json.dumps(
+                    {
+                        "cleanCycleTimer": {
+                            "cleanTimer": "enable",
+                            "startHour": 18,
+                            "startMinute": 45,
+                        }
+                    }
+                ),
+            )
+
+        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            assert client.spa is not None
+            await client.set_clean_cycle_schedule(
+                enabled=True, start_hour=18, start_minute=45
+            )
+            assert client.spa.clean_cycle.clean_timer_enabled is True
+            assert client.spa.clean_cycle.start_hour == 18
+            assert client.spa.clean_cycle.start_minute == 45
+
+    async def test_set_clean_cycle_schedule_validation(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test clean cycle schedule input validation."""
+        _add_update_mocks(aresponses)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(ValueError, match="start_hour must be between 0 and 23"):
+                await client.set_clean_cycle_schedule(
+                    enabled=True, start_hour=24, start_minute=0
+                )
+            msg_minute = "start_minute must be between 0 and 59"
+            with pytest.raises(ValueError, match=msg_minute):
+                await client.set_clean_cycle_schedule(
+                    enabled=True, start_hour=10, start_minute=60
+                )
 
     async def test_command_response_reactively_updates_state(
         self, aresponses: ResponsesMockServer

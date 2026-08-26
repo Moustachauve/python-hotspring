@@ -187,7 +187,7 @@ class BrightnessLevel(Enum):
     LEVEL_3 = "brightness_level_3"
 
     @classmethod
-    def build(cls, value: str | None) -> BrightnessLevel:
+    def build(cls, value: str | int | None) -> BrightnessLevel:
         """Parse a raw API string into a BrightnessLevel.
 
         Args:
@@ -202,10 +202,18 @@ class BrightnessLevel(Enum):
         """
         if value is None:
             return cls.UNKNOWN
-        return _BRIGHTNESS_MAP.get(value, cls.UNKNOWN)
+        val_str = str(value).strip().lower()
+        return _BRIGHTNESS_MAP.get(val_str, cls.UNKNOWN)
 
 
 _BRIGHTNESS_MAP: dict[str, BrightnessLevel] = {b.value: b for b in BrightnessLevel}
+_BRIGHTNESS_MAP.update(
+    {
+        "1": BrightnessLevel.LEVEL_1,
+        "2": BrightnessLevel.LEVEL_2,
+        "3": BrightnessLevel.LEVEL_3,
+    }
+)
 
 
 class TemperatureUnit(Enum):

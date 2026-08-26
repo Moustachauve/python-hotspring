@@ -451,6 +451,56 @@ class TestEnergySaving:
         schedules = EnergySaving.list_from_dict(status_response["energySavings"])  # type: ignore[arg-type]
         assert schedules == snapshot
 
+    def test_from_dict_and_is_enabled(self) -> None:
+        """Test EnergySaving is_enabled property and parsing."""
+        s_off = EnergySaving.from_dict(1, {"status": {"mode": 0, "startHour": 0}})
+        assert s_off.is_enabled is False
+
+        s_on = EnergySaving.from_dict(
+            2,
+            {"status": {"mode": 1, "startHour": 14, "startMinute": 30, "duration": 4}},
+        )
+        assert s_on.is_enabled is True
+        assert s_on.start_hour == 14
+        assert s_on.start_minute == 30
+        assert s_on.duration == 4
+
+    def test_from_control_dict(self) -> None:
+        """Test EnergySaving parsing from control dict."""
+        s = EnergySaving.from_dict(
+            1,
+            {
+                "control": {
+                    "mode": "on",
+                    "startHour": "10",
+                    "startMinute": "15",
+                    "duration": "2",
+                }
+            },
+        )
+        assert s.is_enabled is True
+        assert s.start_hour == 10
+        assert s.start_minute == 15
+        assert s.duration == 2
+
+        s_off = EnergySaving.from_dict(1, {"control": {"mode": "off"}}, existing=s)
+        assert s_off.is_enabled is False
+        assert s_off.start_hour == 10
+
+    def test_list_from_control_dict(self) -> None:
+        """Test EnergySaving list_from_dict with control wrapper."""
+        schedules = EnergySaving.list_from_dict(
+            {
+                "control": {
+                    "energySaving1": {"control": {"mode": "on", "startHour": "8"}}
+                }
+            }
+        )
+        assert len(schedules) == 1
+        assert schedules[0].schedule_id == 1
+        assert schedules[0].is_enabled is True
+        assert schedules[0].start_hour == 8
+
 
 class TestVersions:
     """Tests for Versions model parsing."""
@@ -1395,3 +1445,53 @@ class TestControlResponseParsing:
         )
         assert "light_zones" in updated_light
         assert spa.light_zones[0].color == LightColor.BLUE
+
+        # Partial waterCare control echo
+        updated_wc = spa.update_from_dict(
+            {"waterCare": {"control": {"level": "5", "boost": "on"}}}
+        )
+        assert "water_care" in updated_wc
+        assert spa.water_care.level == 5
+        assert spa.water_care.boost_active is True
+
+        # Partial waterCare config echo
+        updated_wc_cfg = spa.update_from_dict(
+            {"waterCare": {"config": {"saltSystemPowerA": "enable"}}}
+        )
+        assert "water_care" in updated_wc_cfg
+        assert spa.water_care.system_enabled is True
+
+        # Partial cleanCycleTimer echo
+        updated_timer = spa.update_from_dict(
+            {
+                "cleanCycleTimer": {
+                    "cleanTimer": "enable",
+                    "startHour": 18,
+                    "startMinute": 30,
+                }
+            }
+        )
+        assert "clean_cycle" in updated_timer
+        assert spa.clean_cycle.clean_timer_enabled is True
+        assert spa.clean_cycle.start_hour == 18
+        assert spa.clean_cycle.start_minute == 30
+
+        # Partial energySavings echo
+        updated_es = spa.update_from_dict(
+            {
+                "energySavings": {
+                    "energySaving1": {
+                        "control": {
+                            "mode": "on",
+                            "startHour": "14",
+                            "startMinute": "0",
+                            "duration": "4",
+                        }
+                    }
+                }
+            }
+        )
+        assert "energy_savings" in updated_es
+        assert spa.energy_savings[0].is_enabled is True
+        assert spa.energy_savings[0].start_hour == 14
+        assert spa.energy_savings[0].duration == 4
