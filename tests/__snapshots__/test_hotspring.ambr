@@ -6,7 +6,10 @@
       is_on=False,
     ),
     clean_cycle=CleanCycle(
+      clean_timer_enabled=False,
       is_enabled=True,
+      start_hour=0,
+      start_minute=0,
       vanishing_act=False,
     ),
     connection_status=ConnectionStatus(

@@ -13,6 +13,7 @@ import backoff
 from yarl import URL
 
 from .const import (
+    BrightnessLevel,
     HeatingMode,
     JetSpeed,
     LightColor,
@@ -35,7 +36,7 @@ from .models import (
 
 
 @dataclass
-class HotSpring:
+class HotSpring:  # pylint: disable=too-many-public-methods
     """Main class for handling connections with a Hot Spring Spa.
 
     The Hot Spring Connected Spa Kit 2 uses a Home Network Adapter (HNA)
@@ -582,6 +583,230 @@ class HotSpring:
         """
         value = "on" if on else "off"
         await self._send_command({"blower": {"control": value}})
+
+    async def set_spa_lock(self, *, locked: bool) -> None:
+        """Lock or unlock all spa controls (Spa Lock).
+
+        Args:
+        ----
+            locked: True to lock, False to unlock.
+
+        """
+        value = "on" if locked else "off"
+        await self._send_command({"spaLock": {"control": value}})
+
+    async def set_temperature_lock(self, *, locked: bool) -> None:
+        """Lock or unlock the spa heater temperature setting (Temperature Lock).
+
+        Args:
+        ----
+            locked: True to lock, False to unlock.
+
+        """
+        value = "on" if locked else "off"
+        await self._send_command({"heater": {"control": {"temperatureLock": value}}})
+
+    async def set_heater_lock(self, *, locked: bool) -> None:
+        """Alias for set_temperature_lock."""
+        await self.set_temperature_lock(locked=locked)
+
+    async def set_vanishing_act(self, *, enabled: bool) -> None:
+        """Enable or disable Vanishing Act (calcium remover cycle).
+
+        Args:
+        ----
+            enabled: True to enable, False to disable.
+
+        """
+        value = "on" if enabled else "off"
+        await self._send_command({"cleanCycle": {"control": {"vanishingAct": value}}})
+
+    async def set_water_care_boost(  # pylint: disable=unused-argument
+        self,
+        *,
+        enabled: bool = True,  # noqa: ARG002
+    ) -> None:
+        """Trigger or toggle the water care chlorine boost.
+
+        Args:
+        ----
+            enabled: Kept for API symmetry (the underlying firmware toggles boost).
+
+        """
+        await self._send_command({"waterCare": {"control": {"boost": "toggle"}}})
+
+    async def set_water_care_level(self, level: int) -> None:
+        """Set the salt water care cartridge output level (0-10).
+
+        Args:
+        ----
+            level: The output level (0 = off/disabled, 1-10 = active output).
+
+        Raises:
+        ------
+            ValueError: If level is not an integer between 0 and 10.
+
+        """
+        if not 0 <= level <= 10:
+            msg = f"Water care level must be between 0 and 10, got {level}"
+            raise ValueError(msg)
+        await self._send_command({"waterCare": {"control": {"level": str(level)}}})
+
+    async def set_salt_system_power(
+        self,
+        *,
+        power_a: bool | None = None,
+        power_b: bool | None = None,
+    ) -> None:
+        """Set the salt system power configuration states.
+
+        Args:
+        ----
+            power_a: Enable or disable saltSystemPowerA, or None to leave unchanged.
+            power_b: Enable or disable saltSystemPowerB, or None to leave unchanged.
+
+        Raises:
+        ------
+            ValueError: If neither power_a nor power_b is specified.
+
+        """
+        cfg: dict[str, object] = {}
+        if power_a is not None:
+            cfg["saltSystemPowerA"] = "enable" if power_a else "disable"
+        if power_b is not None:
+            cfg["saltSystemPowerB"] = "enable" if power_b else "disable"
+        if not cfg:
+            msg = "At least one of power_a or power_b must be provided"
+            raise ValueError(msg)
+        await self._send_command({"waterCare": {"config": cfg}})
+
+    async def set_logo_light(self, level: BrightnessLevel | str | int) -> None:
+        """Set the brightness level of the spa logo light.
+
+        Args:
+        ----
+            level: BrightnessLevel enum, integer (1-3), or string
+                ("1", "2", "3", "auto").
+
+        Raises:
+        ------
+            ValueError: If the brightness level is unrecognized.
+
+        """
+        if isinstance(level, BrightnessLevel):
+            if level == BrightnessLevel.LEVEL_1:
+                val_str = "1"
+            elif level == BrightnessLevel.LEVEL_2:
+                val_str = "2"
+            elif level == BrightnessLevel.LEVEL_3:
+                val_str = "3"
+            else:
+                val_str = "auto"
+        else:
+            s = str(level).strip().lower()
+            if s in ("1", "brightness_level_1"):
+                val_str = "1"
+            elif s in ("2", "brightness_level_2"):
+                val_str = "2"
+            elif s in ("3", "brightness_level_3"):
+                val_str = "3"
+            elif s == "auto":
+                val_str = "auto"
+            else:
+                msg = f"Invalid logo light brightness level: {level}"
+                raise ValueError(msg)
+        await self._send_command({"logoLight": {"control": val_str}})
+
+    async def set_energy_saving_schedule(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        schedule_id: int,
+        *,
+        enabled: bool,
+        start_hour: int,
+        start_minute: int,
+        duration: int,
+    ) -> None:
+        """Configure an Energy Saving schedule (schedule 1 or 2).
+
+        Args:
+        ----
+            schedule_id: Schedule number (1 or 2).
+            enabled: Whether the schedule should be active.
+            start_hour: Start hour in 24-hour format (0-23).
+            start_minute: Start minute (0-59).
+            duration: Duration in hours (1-24).
+
+        Raises:
+        ------
+            ValueError: If schedule_id or time/duration parameters are invalid.
+
+        """
+        if schedule_id not in (1, 2):
+            msg = f"Schedule ID must be 1 or 2, got {schedule_id}"
+            raise ValueError(msg)
+        if not 0 <= start_hour <= 23:
+            msg = f"start_hour must be between 0 and 23, got {start_hour}"
+            raise ValueError(msg)
+        if not 0 <= start_minute <= 59:
+            msg = f"start_minute must be between 0 and 59, got {start_minute}"
+            raise ValueError(msg)
+        if not 1 <= duration <= 24:
+            msg = f"duration must be between 1 and 24, got {duration}"
+            raise ValueError(msg)
+
+        mode_val = "on" if enabled else "off"
+        await self._send_command(
+            {
+                "energySavings": {
+                    f"energySaving{schedule_id}": {
+                        "control": {
+                            "mode": mode_val,
+                            "startHour": str(start_hour),
+                            "startMinute": str(start_minute),
+                            "duration": str(duration),
+                        }
+                    }
+                }
+            }
+        )
+
+    async def set_clean_cycle_schedule(
+        self,
+        *,
+        enabled: bool,
+        start_hour: int,
+        start_minute: int,
+    ) -> None:
+        """Configure the recurring clean cycle timer schedule.
+
+        Args:
+        ----
+            enabled: True to enable 24-hour clean cycle schedule, False to disable.
+            start_hour: Start hour in 24-hour format (0-23).
+            start_minute: Start minute (0-59).
+
+        Raises:
+        ------
+            ValueError: If time parameters are out of range.
+
+        """
+        if not 0 <= start_hour <= 23:
+            msg = f"start_hour must be between 0 and 23, got {start_hour}"
+            raise ValueError(msg)
+        if not 0 <= start_minute <= 59:
+            msg = f"start_minute must be between 0 and 59, got {start_minute}"
+            raise ValueError(msg)
+
+        clean_timer = "enable" if enabled else "disable"
+        await self._send_command(
+            {
+                "cleanCycleTimer": {
+                    "cleanTimer": clean_timer,
+                    "startHour": start_hour,
+                    "startMinute": start_minute,
+                }
+            }
+        )
 
     async def close(self) -> None:
         """Close open client session."""
