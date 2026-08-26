@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from hotspring import (
@@ -35,6 +37,9 @@ from hotspring.models import (
     _merge_entities,
     _parse_temperature,
 )
+
+if TYPE_CHECKING:
+    from syrupy.assertion import SnapshotAssertion
 
 
 class TestEnums:
@@ -134,18 +139,12 @@ class TestEnums:
 class TestHeater:
     """Tests for Heater model parsing."""
 
-    def test_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing heater from a full status response."""
         heater = Heater.from_dict(status_response["heater"])  # type: ignore[arg-type]
-        assert heater.is_on is True
-        assert heater.heater_lock is False
-        assert heater.heatpump_installed is False
-        assert heater.heating_mode == HeatingMode.HEAT_WITH_BOOST
-        assert heater.heater_current == 7.5
-        assert heater.heater_on_seconds == 52046
-        assert heater.set_temperature == 100.0
-        assert heater.current_temperature == 100.0
-        assert heater.temperature_unit == TemperatureUnit.FAHRENHEIT
+        assert heater == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing heater from empty dict uses defaults."""
@@ -180,44 +179,12 @@ class TestHeater:
 class TestJet:
     """Tests for Jet model parsing."""
 
-    def test_list_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_list_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing all jets from status response."""
         jets = Jet.list_from_dict(status_response["JET"])  # type: ignore[arg-type]
-        assert len(jets) == 3
-
-        # JET1 should be dualSpeed, enabled, and running
-        assert jets[0].jet_id == 1
-        assert jets[0].speed == JetSpeed.HIGH_SPEED
-        assert jets[0].speed_type == JetSpeedType.DUAL_SPEED
-        assert jets[0].is_enabled is True
-        assert jets[0].is_available is True
-        assert jets[0].is_on is True
-        assert jets[0].is_dual_speed is True
-        assert jets[0].is_single_speed is False
-        assert jets[0].supported_speeds == [
-            JetSpeed.OFF,
-            JetSpeed.LOW_SPEED,
-            JetSpeed.HIGH_SPEED,
-        ]
-        assert jets[0].on_seconds == 1061668
-
-        # JET2 should be singleSpeed, enabled, and off
-        assert jets[1].jet_id == 2
-        assert jets[1].is_enabled is True
-        assert jets[1].is_available is True
-        assert jets[1].is_on is False
-        assert jets[1].speed == JetSpeed.OFF
-        assert jets[1].speed_type == JetSpeedType.SINGLE_SPEED
-        assert jets[1].is_dual_speed is False
-        assert jets[1].is_single_speed is True
-        assert jets[1].supported_speeds == [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
-
-        # JET3 should be disabled
-        assert jets[2].jet_id == 3
-        assert jets[2].is_enabled is False
-        assert jets[2].is_available is False
-        assert jets[2].is_on is False
-        assert jets[2].supported_speeds == [JetSpeed.OFF]
+        assert jets == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing jets from empty dict."""
@@ -234,7 +201,7 @@ class TestJet:
         assert jets[0].jet_id == 1
         assert jets[1].jet_id == 3
 
-    def test_jet3_concurrent_and_current(self) -> None:
+    def test_jet3_concurrent_and_current(self, snapshot: SnapshotAssertion) -> None:
         """Test parsing Jet 3 concurrent mode and electrical current."""
         jet = Jet.from_dict(
             3,
@@ -243,16 +210,7 @@ class TestJet:
                 "status": {"speed": "highSpeed", "current": 9216, "jet_3_ON_sec": 512},
             },
         )
-        assert jet.jet_id == 3
-        assert jet.is_enabled is True
-        assert jet.is_available is True
-        assert jet.is_on is True
-        assert jet.speed == JetSpeed.HIGH_SPEED
-        assert jet.speed_type == JetSpeedType.SINGLE_SPEED
-        assert jet.concurrent_mode is True
-        assert jet.current == 3.6  # 9216 / 2560
-        assert jet.on_seconds == 2
-        assert jet.supported_speeds == [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
+        assert jet == snapshot
 
     def test_jet_negative_runtime_overflow(self) -> None:
         """Test graceful handling of negative signed integer overflow in runtime."""
@@ -267,45 +225,73 @@ class TestJet:
         assert jet.is_on is False
         assert jet.speed_type == JetSpeedType.DUAL_SPEED
 
+    def test_jet_properties(self) -> None:
+        """Test computed properties on Jet."""
+        dual_jet = Jet(
+            jet_id=1,
+            speed=JetSpeed.HIGH_SPEED,
+            speed_type=JetSpeedType.DUAL_SPEED,
+            is_enabled=True,
+        )
+        assert dual_jet.is_available is True
+        assert dual_jet.is_on is True
+        assert dual_jet.is_dual_speed is True
+        assert dual_jet.is_single_speed is False
+        assert dual_jet.supported_speeds == [
+            JetSpeed.OFF,
+            JetSpeed.LOW_SPEED,
+            JetSpeed.HIGH_SPEED,
+        ]
+
+        single_jet = Jet(
+            jet_id=2,
+            speed=JetSpeed.OFF,
+            speed_type=JetSpeedType.SINGLE_SPEED,
+            is_enabled=True,
+        )
+        assert single_jet.is_available is True
+        assert single_jet.is_on is False
+        assert single_jet.is_dual_speed is False
+        assert single_jet.is_single_speed is True
+        assert single_jet.supported_speeds == [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
+
+        disabled_jet = Jet(
+            jet_id=3,
+            speed=JetSpeed.OFF,
+            speed_type=JetSpeedType.SINGLE_SPEED,
+            is_enabled=False,
+        )
+        assert disabled_jet.is_available is False
+        assert disabled_jet.supported_speeds == [JetSpeed.OFF]
+
 
 class TestBlower:
     """Tests for Blower model parsing."""
 
-    def test_from_dict_disabled(self, status_response: dict[str, object]) -> None:
+    def test_from_dict_disabled(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing disabled blower."""
         blower = Blower.from_dict(status_response["blower"])  # type: ignore[arg-type]
-        assert blower.is_enabled is False
-        assert blower.is_on is False
+        assert blower == snapshot
 
-    def test_from_dict_enabled_on(self) -> None:
+    def test_from_dict_enabled_on(self, snapshot: SnapshotAssertion) -> None:
         """Test parsing enabled and running blower."""
         blower = Blower.from_dict(
             {"config": {"blower": "enable"}, "status": {"blower": "on"}}
         )
-        assert blower.is_enabled is True
-        assert blower.is_on is True
+        assert blower == snapshot
 
 
 class TestLightZone:
     """Tests for LightZone model parsing."""
 
-    def test_list_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_list_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing all light zones from status response."""
         zones = LightZone.list_from_dict(status_response["lights"])  # type: ignore[arg-type]
-        assert len(zones) == 4
-
-        # Zone 1 should be on with Blue color (API sends "BLUE")
-        assert zones[0].zone_id == 1
-        assert zones[0].is_enabled is True
-        assert zones[0].is_on is True
-        assert zones[0].color == LightColor.BLUE
-        assert zones[0].light_wheel == LightWheelMode.OFF
-        assert zones[0].intensity == 5
-        assert zones[0].loop_speed == 0
-
-        # Zone 2 should be disabled
-        assert zones[1].zone_id == 2
-        assert zones[1].is_enabled is False
+        assert zones == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing light zones from empty dict."""
@@ -348,7 +334,7 @@ class TestLightZone:
         assert on_zone.intensity == 3
         assert on_zone.color == LightColor.RED
 
-    def test_custom_rgb_from_payload(self) -> None:
+    def test_custom_rgb_from_payload(self, snapshot: SnapshotAssertion) -> None:
         """Test parsing custom RGB from explicit payload fields."""
         zone = LightZone.from_dict(
             1,
@@ -364,20 +350,18 @@ class TestLightZone:
                 },
             },
         )
-        assert zone.color == LightColor.CUSTOM
-        assert zone.rgb_state == "active"
-        assert zone.c_red == 0
-        assert zone.c_green == 255
-        assert zone.c_blue == 255
+        assert zone == snapshot
 
 
 class TestLogoLight:
     """Tests for LogoLight model parsing."""
 
-    def test_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing logo light."""
         logo = LogoLight.from_dict(status_response["logoLight"])  # type: ignore[arg-type]
-        assert logo.brightness == BrightnessLevel.LEVEL_2
+        assert logo == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing logo light from empty dict."""
@@ -388,20 +372,23 @@ class TestLogoLight:
 class TestCleanCycle:
     """Tests for CleanCycle model parsing."""
 
-    def test_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing clean cycle."""
         clean = CleanCycle.from_dict(status_response["cleanCycle"])  # type: ignore[arg-type]
-        assert clean.is_enabled is True
-        assert clean.vanishing_act is False
+        assert clean == snapshot
 
 
 class TestSpaLock:
     """Tests for SpaLock model parsing."""
 
-    def test_from_dict_unlocked(self, status_response: dict[str, object]) -> None:
+    def test_from_dict_unlocked(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing unlocked spa."""
         lock = SpaLock.from_dict(status_response["spaLock"])  # type: ignore[arg-type]
-        assert lock.is_locked is False
+        assert lock == snapshot
 
     def test_from_dict_locked(self) -> None:
         """Test parsing locked spa."""
@@ -412,41 +399,30 @@ class TestSpaLock:
 class TestWaterCare:
     """Tests for WaterCare model parsing."""
 
-    def test_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing water care data."""
         water = WaterCare.from_dict(status_response["waterCare"])  # type: ignore[arg-type]
-        assert water.cartridge_installed is True
-        assert water.ten_day_timer == 0
-        assert water.one_twenty_day_timer == 0
-        assert water.level == 3
-        assert water.system_enabled is True
-        assert water.ace_mode == "normal"
-        assert water.boost_active is False
-        assert water.salt_value == 0
+        assert water == snapshot
 
 
 class TestFreshWaterIQ:
     """Tests for FreshWaterIQ model parsing."""
 
-    def test_from_status_dict(self, status_response: dict[str, object]) -> None:
+    def test_from_status_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing FWIQ data from /status FWIQ_Parameters section."""
         fwiq = FreshWaterIQ.from_dict(status_response["FWIQ_Parameters"])  # type: ignore[arg-type]
-        assert fwiq.conductivity == 1500
-        assert fwiq.orp == 650
-        assert fwiq.chlorine == 3.2
-        assert fwiq.ph == 7.5
-        assert fwiq.sensor_life_percentage == 85.0
-        assert fwiq.installed is True  # Flat format assumes installed
+        assert fwiq == snapshot
 
-    def test_from_fwiq_endpoint(self, fwiq_response: dict[str, object]) -> None:
+    def test_from_fwiq_endpoint(
+        self, fwiq_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing FWIQ data from /getFWIQData endpoint (nested)."""
         fwiq = FreshWaterIQ.from_dict(fwiq_response)
-        assert fwiq.installed is False
-        assert fwiq.ph == -1.0
-        assert fwiq.chlorine == -1.0
-        assert fwiq.orp == -1
-        assert fwiq.conductivity == -1
-        assert fwiq.sensor_life_percentage == -1.0
+        assert fwiq == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing FWIQ from empty dict uses defaults."""
@@ -468,37 +444,34 @@ class TestFreshWaterIQ:
 class TestEnergySaving:
     """Tests for EnergySaving model parsing."""
 
-    def test_list_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_list_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing energy saving schedules."""
         schedules = EnergySaving.list_from_dict(status_response["energySavings"])  # type: ignore[arg-type]
-        assert len(schedules) == 2
-        assert schedules[0].schedule_id == 1
-        assert schedules[0].mode == 0
-        assert schedules[1].schedule_id == 2
+        assert schedules == snapshot
 
 
 class TestVersions:
     """Tests for Versions model parsing."""
 
-    def test_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing firmware versions."""
         versions = Versions.from_dict(status_response["productVersions"]["status"])  # type: ignore[index]
-        assert versions.control_box == "EG25.2100K0"
-        assert versions.control_panel == "HT25.1102F0"
-        assert versions.fwss == "105"
-        assert versions.cool_zone == ""
-        assert versions.amp == ""
+        assert versions == snapshot
 
 
 class TestConnectionStatus:
     """Tests for ConnectionStatus model parsing."""
 
     def test_from_dict_connected(
-        self, connect_status_response: dict[str, object]
+        self, connect_status_response: dict[str, object], snapshot: SnapshotAssertion
     ) -> None:
         """Test parsing connection status when connected."""
         status = ConnectionStatus.from_dict(connect_status_response)
-        assert status.spa_connected is True
+        assert status == snapshot
 
     def test_from_dict_disconnected(self) -> None:
         """Test parsing connection status when disconnected."""
@@ -514,14 +487,12 @@ class TestConnectionStatus:
 class TestDiagnostics:
     """Tests for Diagnostics model parsing."""
 
-    def test_from_dict(self, debug_data_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, debug_data_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing diagnostics data."""
         diag = Diagnostics.from_dict(debug_data_response)
-        assert diag.spa_failure_state == SpaFailureState.OK
-        assert diag.heater_error == "0"
-        assert diag.power_frequency == "0"
-        assert diag.heater_power == "60"
-        assert diag.l1_n_volts == 0.0
+        assert diag == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing diagnostics from empty dict uses defaults."""
@@ -547,15 +518,12 @@ class TestDiagnostics:
 class TestSpaTestData:
     """Tests for SpaTestData model parsing."""
 
-    def test_from_dict(self, status_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing test data metrics."""
         test_metrics = SpaTestData.from_dict(status_response["test_data"])  # type: ignore[arg-type]
-        assert test_metrics.heater_test_status == "off"
-        assert test_metrics.temp_offset == 0.0
-        assert test_metrics.vsense_cal == 0.0
-        assert test_metrics.small_loads_current == 0.0
-        assert test_metrics.heater_current == 7.5
-        assert test_metrics.jet3_current == 0.0
+        assert test_metrics == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing test data from empty dict uses defaults."""
@@ -566,7 +534,9 @@ class TestSpaTestData:
 class TestSpaInfo:
     """Tests for SpaInfo model parsing."""
 
-    def test_from_dict(self, startup_response: dict[str, object]) -> None:
+    def test_from_dict(
+        self, startup_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing spa identity info."""
         # Mix in spamodel data for test
         startup_response["SPAModelData"] = {
@@ -578,20 +548,7 @@ class TestSpaInfo:
             }
         }
         info = SpaInfo.from_dict(startup_response)
-        assert info.hostname == "ConnectedSpa_112233"
-        assert info.root_topic == "mySpaAABBCC112233"
-        assert info.mac_address == "AA:BB:CC:11:22:33"
-        assert info.sna_ready is True
-        assert info.brand == SpaBrand.HOTSPRING
-        assert info.brand_name == "HotSpring"
-        assert info.collection == "Limelight"
-        assert info.model_name == "Limelight Beam Canada"
-        assert info.brand_id == "0"
-        assert info.collection_id == "1"
-        assert info.model_id == "4"
-        assert info.collection_type == "1"
-        assert info.model_type == "4"
-        assert info.volume == 335
+        assert info == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing info from empty dict uses defaults."""
@@ -689,6 +646,8 @@ class TestSpaInfo:
         assert info.brand_id == (brand_id or "")
         assert info.collection_id == (collection_id or "")
         assert info.model_id == (model_id or "")
+        assert info.collection_type == (collection_id or "")
+        assert info.model_type == (model_id or "")
         assert SpaBrand.build(None) == SpaBrand.UNKNOWN
 
     def test_mac_address_formatting(self) -> None:
@@ -756,27 +715,12 @@ class TestSpaInfo:
 class TestSpa:  # pylint: disable=too-many-public-methods
     """Tests for the top-level Spa model."""
 
-    def test_full_status_parsing(self, status_response: dict[str, object]) -> None:
+    def test_full_status_parsing(
+        self, status_response: dict[str, object], snapshot: SnapshotAssertion
+    ) -> None:
         """Test parsing a complete /status response into a Spa object."""
         spa = Spa(status_response)
-
-        # Verify heater
-        assert spa.heater.is_on is True
-        assert spa.heater.current_temperature == 100.0
-
-        # Verify jets
-        assert len(spa.jets) == 3
-        assert spa.jets[0].speed == JetSpeed.HIGH_SPEED
-
-        # Verify lights
-        assert len(spa.light_zones) == 4
-        assert spa.light_zones[0].color == LightColor.BLUE
-
-        # Verify other components
-        assert spa.clean_cycle.is_enabled is True
-        assert spa.spa_lock.is_locked is False
-        assert spa.blower.is_enabled is False
-        assert spa.logo_light.brightness == BrightnessLevel.LEVEL_2
+        assert spa == snapshot
 
     def test_update_info(self, status_response: dict[str, object]) -> None:
         """Test updating spa info with startup and spamodel data."""
