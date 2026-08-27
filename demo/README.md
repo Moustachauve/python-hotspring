@@ -23,6 +23,7 @@ poetry run python demo/demo_color_cycle.py
 ## Available Demos
 
 - **`demo_color_cycle.py`**: Cycles Light Zone 1 through 5 different colors (Red, Blue, Green, Magenta, Aqua) with 2-second intervals.
+- **`demo_print_data.py`**: Connects to the spa and prints a comprehensive status report including identity, heater & jet state, lighting, water care, diagnostics, and raw test metrics.
 - **`demo_set_light_red.py`**: Sets Light Zone 1 to the color Red at maximum intensity.
 - **`demo_turn_off_all_lights.py`**: Turns off every enabled light zone on the spa.
 - **`demo_turn_on_jet.py`**: Turns on Jet 1 at low speed.

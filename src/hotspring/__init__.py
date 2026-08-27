@@ -34,6 +34,7 @@ from .models import (
     Spa,
     SpaInfo,
     SpaLock,
+    SpaTestData,
     Versions,
     WaterCare,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "SpaFailureState",
     "SpaInfo",
     "SpaLock",
+    "SpaTestData",
     "TemperatureUnit",
     "Versions",
     "WaterCare",

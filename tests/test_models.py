@@ -222,7 +222,8 @@ class TestJet:
                 "status": {"speed": "off", "jet_1_ON_sec": -1568323328},
             },
         )
-        assert jet.on_seconds == 0
+        assert jet.on_seconds == 10650953
+        assert jet.on_hours == 2958.6
         assert jet.is_on is False
         assert jet.speed_type == JetSpeedType.DUAL_SPEED
 
@@ -233,11 +234,14 @@ class TestJet:
             speed=JetSpeed.HIGH_SPEED,
             speed_type=JetSpeedType.DUAL_SPEED,
             is_enabled=True,
+            current=10.4,
+            on_seconds=7200,
         )
         assert dual_jet.is_available is True
         assert dual_jet.is_on is True
         assert dual_jet.is_dual_speed is True
         assert dual_jet.is_single_speed is False
+        assert dual_jet.on_hours == 2.0
         assert dual_jet.supported_speeds == [
             JetSpeed.OFF,
             JetSpeed.LOW_SPEED,
@@ -589,6 +593,28 @@ class TestDiagnostics:
             assert diag.spa_failure_state == SpaFailureState.UNKNOWN
             assert diag.heater_power == "0"
 
+    def test_voltages_and_extended_keys(self) -> None:
+        """Test voltage computed properties and extended diagnostic keys."""
+        data: dict[str, object] = {
+            "debugData": {
+                "status": {
+                    "spaFailureState": "Spa_Ok",
+                    "circulationPumpFlowStatus": "1",
+                    "regulationThermistorTempStatus": "2",
+                    "limitThermistorStatus": "3",
+                    "L1_N_Volts": "3840",
+                    "L2_N_Volts": "3584",
+                    "jet3_Volts": "3840",
+                }
+            }
+        }
+        diag = Diagnostics.from_dict(data)
+        assert diag.circulation_pump_flow_status == "1"
+        assert diag.regulation_thermistor_temp_status == "2"
+        assert diag.limit_thermistor_status == "3"
+        assert diag.l1_n_volts == 120.0
+        assert diag.l2_n_volts == 112.0
+
 
 class TestSpaTestData:
     """Tests for SpaTestData model parsing."""
@@ -880,6 +906,19 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert "test_metrics" in updated
         assert "energy_savings" in updated
         assert "versions" in updated
+
+    def test_system_uptime_properties(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test system_uptime on Spa."""
+        spa = Spa(status_response)
+        assert spa.system_uptime_seconds == 1061668
+        assert spa.system_uptime_days == 12.3
+
+        # Empty spa defaults
+        empty_spa = Spa({})
+        assert empty_spa.system_uptime_seconds == 0
+        assert empty_spa.system_uptime_days == 0.0
 
     def test_update_from_dict_non_dict_section(
         self, status_response: dict[str, object]

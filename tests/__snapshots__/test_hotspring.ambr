@@ -16,6 +16,7 @@
       spa_connected=True,
     ),
     diagnostics=Diagnostics(
+      circulation_pump_flow_status='0',
       heater_error='0',
       heater_power='0',
       heater_volts=0.0,
@@ -24,8 +25,10 @@
       jet3_volts=0.0,
       l1_n_volts=0.0,
       l2_n_volts=0.0,
+      limit_thermistor_status='0',
       power_frequency='0',
       pressure_switch_status='0',
+      regulation_thermistor_temp_status='0',
       small_loads_power='0',
       spa_failure_state=<SpaFailureState.UNKNOWN: 'unknown'>,
     ),
@@ -166,6 +169,8 @@
     spa_lock=SpaLock(
       is_locked=False,
     ),
+    system_uptime_days=12.3,
+    system_uptime_seconds=1061668,
     test_metrics=SpaTestData(
       heater_current=7.5,
       heater_test_status='off',
@@ -203,6 +208,7 @@
 # ---
 # name: TestUpdateDiagnostics.test_update_diagnostics
   Diagnostics(
+    circulation_pump_flow_status='0',
     heater_error='0',
     heater_power='60',
     heater_volts=0.0,
@@ -211,8 +217,10 @@
     jet3_volts=112.0,
     l1_n_volts=0.0,
     l2_n_volts=120.0,
+    limit_thermistor_status='0',
     power_frequency='0',
     pressure_switch_status='1',
+    regulation_thermistor_temp_status='0',
     small_loads_power='0',
     spa_failure_state=<SpaFailureState.OK: 'Spa_Ok'>,
   )
