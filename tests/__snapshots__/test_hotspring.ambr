@@ -32,22 +32,22 @@
       small_loads_power='0',
       spa_failure_state=<SpaFailureState.UNKNOWN: 'unknown'>,
     ),
-    energy_savings=list([
-      EnergySaving(
+    energy_savings=dict({
+      1: EnergySaving(
         duration=0,
         mode=0,
         schedule_id=1,
         start_hour=0,
         start_minute=0,
       ),
-      EnergySaving(
+      2: EnergySaving(
         duration=0,
         mode=0,
         schedule_id=2,
         start_hour=0,
         start_minute=0,
       ),
-    ]),
+    }),
     freshwater_iq=FreshWaterIQ(
       chlorine=3.2,
       conductivity=1500,
@@ -80,8 +80,8 @@
       sna_ready=True,
       volume=335,
     ),
-    jets=list([
-      Jet(
+    jets=dict({
+      1: Jet(
         concurrent_mode=False,
         current=0.0,
         is_enabled=True,
@@ -90,7 +90,7 @@
         speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
         speed_type=<JetSpeedType.DUAL_SPEED: 'dualSpeed'>,
       ),
-      Jet(
+      2: Jet(
         concurrent_mode=False,
         current=0.0,
         is_enabled=True,
@@ -99,7 +99,7 @@
         speed=<JetSpeed.OFF: 'off'>,
         speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
       ),
-      Jet(
+      3: Jet(
         concurrent_mode=False,
         current=0.0,
         is_enabled=False,
@@ -108,9 +108,9 @@
         speed=<JetSpeed.OFF: 'off'>,
         speed_type=<JetSpeedType.UNKNOWN: 'unknown'>,
       ),
-    ]),
-    light_zones=list([
-      LightZone(
+    }),
+    light_zones=dict({
+      1: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -123,7 +123,7 @@
         rgb_state='inactive',
         zone_id=1,
       ),
-      LightZone(
+      2: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -136,7 +136,7 @@
         rgb_state='inactive',
         zone_id=2,
       ),
-      LightZone(
+      3: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -149,7 +149,7 @@
         rgb_state='inactive',
         zone_id=3,
       ),
-      LightZone(
+      4: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -162,7 +162,7 @@
         rgb_state='inactive',
         zone_id=4,
       ),
-    ]),
+    }),
     logo_light=LogoLight(
       brightness=<BrightnessLevel.LEVEL_2: 'brightness_level_2'>,
     ),

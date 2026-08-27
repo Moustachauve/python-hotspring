@@ -26,7 +26,7 @@ async def main() -> None:
             await spa.update()
             assert spa.spa is not None
 
-            enabled_zones = [z for z in spa.spa.light_zones if z.is_enabled]
+            enabled_zones = [z for z in spa.spa.light_zones.values() if z.is_enabled]
             print(f"Found {len(enabled_zones)} enabled light zones.")
 
             for zone in enabled_zones:

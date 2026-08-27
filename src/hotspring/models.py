@@ -39,15 +39,15 @@ class Spa:
 
     info: SpaInfo
     heater: Heater
-    jets: list[Jet]
+    jets: dict[int, Jet]
     blower: Blower
-    light_zones: list[LightZone]
+    light_zones: dict[int, LightZone]
     logo_light: LogoLight
     clean_cycle: CleanCycle
     spa_lock: SpaLock
     water_care: WaterCare
     freshwater_iq: FreshWaterIQ
-    energy_savings: list[EnergySaving]
+    energy_savings: dict[int, EnergySaving]
     versions: Versions
     connection_status: ConnectionStatus
     diagnostics: Diagnostics
@@ -62,16 +62,16 @@ class Spa:
 
         """
         self.heater = Heater()
-        self.jets = []
+        self.jets = {}
         self.blower = Blower()
-        self.light_zones = []
+        self.light_zones = {}
         self.logo_light = LogoLight()
         self.clean_cycle = CleanCycle()
         self.spa_lock = SpaLock()
         self.water_care = WaterCare()
         self.freshwater_iq = FreshWaterIQ()
         self.test_metrics = SpaTestData()
-        self.energy_savings = []
+        self.energy_savings = {}
         self.versions = Versions()
         self.info = SpaInfo()
         self.connection_status = ConnectionStatus()
@@ -104,26 +104,22 @@ class Spa:
                 updated.add(section.attr_name)
 
         if "JET" in data and isinstance(data["JET"], dict):
-            new_jets = Jet.list_from_dict(data["JET"], existing=self.jets)
-            self.jets = _merge_entities(self.jets, new_jets, lambda j: j.jet_id)
+            new_jets = Jet.dict_from_dict(data["JET"], existing=self.jets)
+            self.jets.update(new_jets)
             updated.add("jets")
 
         if "lights" in data and isinstance(data["lights"], dict):
-            new_zones = LightZone.list_from_dict(
+            new_zones = LightZone.dict_from_dict(
                 data["lights"], existing=self.light_zones
             )
-            self.light_zones = _merge_entities(
-                self.light_zones, new_zones, lambda z: z.zone_id
-            )
+            self.light_zones.update(new_zones)
             updated.add("light_zones")
 
         if "energySavings" in data and isinstance(data["energySavings"], dict):
-            new_schedules = EnergySaving.list_from_dict(
+            new_schedules = EnergySaving.dict_from_dict(
                 data["energySavings"], existing=self.energy_savings
             )
-            self.energy_savings = _merge_entities(
-                self.energy_savings, new_schedules, lambda s: s.schedule_id
-            )
+            self.energy_savings.update(new_schedules)
             updated.add("energy_savings")
 
         # Handle cleanCycleTimer (POST /spaManager command echo for the 24h clean timer)
@@ -471,36 +467,36 @@ class Jet:
         return replace(base, **kwargs)
 
     @staticmethod
-    def list_from_dict(
+    def dict_from_dict(
         data: dict[str, object],
-        existing: list[Jet] | None = None,
-    ) -> list[Jet]:
+        existing: dict[int, Jet] | None = None,
+    ) -> dict[int, Jet]:
         """Parse all jets from the JET section of the /status response.
 
         Args:
         ----
             data: The ``JET`` dict from the /status response.
-            existing: Optional existing list of Jet instances for field preservation.
+            existing: Optional existing dict of Jet instances for field preservation.
 
         Returns:
         -------
-            A list of Jet instances.
+            A dict of Jet instances keyed by jet ID.
 
         """
         if "control" in data and isinstance(data["control"], dict):
             data = data["control"]
-        existing_map = {j.jet_id: j for j in existing} if existing else {}
-        jets: list[Jet] = []
+        existing_map = existing or {}
+        jets: dict[int, Jet] = {}
         for key, value in data.items():
             if key.upper().startswith("JET") and isinstance(value, dict):
                 try:
                     jet_id = int(key[3:])
                 except ValueError:
                     continue
-                jets.append(
-                    Jet.from_dict(jet_id, value, existing=existing_map.get(jet_id))
+                jets[jet_id] = Jet.from_dict(
+                    jet_id, value, existing=existing_map.get(jet_id)
                 )
-        return sorted(jets, key=lambda j: j.jet_id)
+        return jets
 
 
 @dataclass
@@ -604,26 +600,26 @@ class LightZone:
         return replace(base, **kwargs)
 
     @staticmethod
-    def list_from_dict(
+    def dict_from_dict(
         data: dict[str, object],
-        existing: list[LightZone] | None = None,
-    ) -> list[LightZone]:
+        existing: dict[int, LightZone] | None = None,
+    ) -> dict[int, LightZone]:
         """Parse all light zones from the lights section.
 
         Args:
         ----
             data: The ``lights`` dict from the /status response.
-            existing: Optional existing list of LightZone instances.
+            existing: Optional existing dict of LightZone instances.
 
         Returns:
         -------
-            A list of LightZone instances.
+            A dict of LightZone instances keyed by zone ID.
 
         """
         if "control" in data and isinstance(data["control"], dict):
             data = data["control"]
-        existing_map = {z.zone_id: z for z in existing} if existing else {}
-        zones: list[LightZone] = []
+        existing_map = existing or {}
+        zones: dict[int, LightZone] = {}
         for key, value in data.items():
             key_lower = key.lower()
             if key_lower.startswith("zone") and isinstance(value, dict):
@@ -631,12 +627,10 @@ class LightZone:
                     zone_id = int(key_lower[4:])
                 except ValueError:
                     continue
-                zones.append(
-                    LightZone.from_dict(
-                        zone_id, value, existing=existing_map.get(zone_id)
-                    )
+                zones[zone_id] = LightZone.from_dict(
+                    zone_id, value, existing=existing_map.get(zone_id)
                 )
-        return sorted(zones, key=lambda z: z.zone_id)
+        return zones
 
 
 @dataclass
@@ -942,21 +936,21 @@ class EnergySaving:
         return replace(base, **kwargs)
 
     @staticmethod
-    def list_from_dict(
+    def dict_from_dict(
         data: dict[str, object],
-        existing: list[EnergySaving] | None = None,
-    ) -> list[EnergySaving]:
+        existing: dict[int, EnergySaving] | None = None,
+    ) -> dict[int, EnergySaving]:
         """Parse all energy saving schedules from the /status response.
 
         Args:
         ----
             data: The ``energySavings`` dict from the /status response.
-            existing: Optional existing list of EnergySaving instances
+            existing: Optional existing dict of EnergySaving instances
                 for field preservation.
 
         Returns:
         -------
-            A list of EnergySaving instances.
+            A dict of EnergySaving instances keyed by schedule ID.
 
         """
         items = (
@@ -964,20 +958,18 @@ class EnergySaving:
             if "control" in data and isinstance(data["control"], dict)
             else data
         )
-        existing_map = {s.schedule_id: s for s in existing} if existing else {}
-        schedules: list[EnergySaving] = []
+        existing_map = existing or {}
+        schedules: dict[int, EnergySaving] = {}
         for key, value in items.items():
             if key.startswith("energySaving") and isinstance(value, dict):
                 try:
                     schedule_id = int(key[12:])
                 except ValueError:
                     continue
-                schedules.append(
-                    EnergySaving.from_dict(
-                        schedule_id, value, existing=existing_map.get(schedule_id)
-                    )
+                schedules[schedule_id] = EnergySaving.from_dict(
+                    schedule_id, value, existing=existing_map.get(schedule_id)
                 )
-        return sorted(schedules, key=lambda s: s.schedule_id)
+        return schedules
 
 
 @dataclass
@@ -1199,19 +1191,6 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
                 kwargs[attr] = int(debug.get(json_key) or 0) / 32.0
 
         return replace(Diagnostics(), **kwargs)
-
-
-def _merge_entities[T, K](
-    existing: list[T], incoming: list[T], key_func: Callable[[T], K]
-) -> list[T]:
-    """Merge incoming partial updates into an existing list by entity ID."""
-    incoming_map = {key_func(item): item for item in incoming}
-    if not existing:
-        return list(incoming_map.values())
-    result = [incoming_map.get(key_func(item), item) for item in existing]
-    existing_keys = {key_func(item) for item in existing}
-    result.extend(incoming_map[k] for k in incoming_map if k not in existing_keys)
-    return result
 
 
 class _SectionParser(NamedTuple):

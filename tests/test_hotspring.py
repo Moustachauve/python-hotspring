@@ -964,7 +964,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             await client.set_energy_saving_schedule(
                 1, enabled=True, start_hour=14, start_minute=30, duration=4
             )
-            s1 = client.spa.energy_savings[0]
+            s1 = client.spa.energy_savings[1]
             assert s1.is_enabled is True
             assert s1.start_hour == 14
             assert s1.start_minute == 30
@@ -1102,25 +1102,25 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert client.spa is not None
 
             # Initial state
-            assert client.spa.light_zones[0].intensity == 5
-            assert client.spa.light_zones[0].color == LightColor.BLUE
-            assert client.spa.jets[0].speed == JetSpeed.HIGH_SPEED
+            assert client.spa.light_zones[1].intensity == 5
+            assert client.spa.light_zones[1].color == LightColor.BLUE
+            assert client.spa.jets[1].speed == JetSpeed.HIGH_SPEED
 
             # Execute light command -> immediately updates zone 1 in memory
             await client.set_light_rgb(1, 0, 255, 255)
-            assert client.spa.light_zones[0].intensity == 4
-            assert client.spa.light_zones[0].color == LightColor.CUSTOM
-            assert client.spa.light_zones[0].c_red == 0
-            assert client.spa.light_zones[0].c_green == 255
-            assert client.spa.light_zones[0].c_blue == 255
-            assert client.spa.light_zones[0].rgb_state == "active"
+            assert client.spa.light_zones[1].intensity == 4
+            assert client.spa.light_zones[1].color == LightColor.CUSTOM
+            assert client.spa.light_zones[1].c_red == 0
+            assert client.spa.light_zones[1].c_green == 255
+            assert client.spa.light_zones[1].c_blue == 255
+            assert client.spa.light_zones[1].rgb_state == "active"
             # Other zones untouched
-            assert client.spa.light_zones[1].zone_id == 2
+            assert client.spa.light_zones[2].zone_id == 2
 
             # Execute jet command -> immediately updates jet 1 in memory to off
             await client.set_jet(1, "off")
-            assert client.spa.jets[0].speed == JetSpeed.OFF
-            assert client.spa.jets[1].jet_id == 2
+            assert client.spa.jets[1].speed == JetSpeed.OFF
+            assert client.spa.jets[2].jet_id == 2
 
     async def test_command_sna_not_connected(
         self, aresponses: ResponsesMockServer

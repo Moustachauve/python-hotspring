@@ -28,7 +28,7 @@ async def main() -> None:
             assert spa.spa is not None
 
             # Find current color for Zone 1
-            zone1 = next((z for z in spa.spa.light_zones if z.zone_id == 1), None)
+            zone1 = spa.spa.light_zones.get(1)
             print(f"Current color for Zone 1: {zone1.color if zone1 else 'Unknown'}")
 
             print("Setting Light Zone 1 to RED (Intensity 5)...")
@@ -40,7 +40,7 @@ async def main() -> None:
 
             await spa.update()
             assert spa.spa is not None
-            zone1 = next((z for z in spa.spa.light_zones if z.zone_id == 1), None)
+            zone1 = spa.spa.light_zones.get(1)
             print(f"New color for Zone 1: {zone1.color if zone1 else 'Unknown'}")
 
             if zone1 and zone1.color == LightColor.RED:
