@@ -14,9 +14,11 @@ Asynchronous Python client for Hot Spring Connected Spa Kit 2.
 > perfectly, and some features may not be fully tested as they depend on the
 > physical hardware available for testing.
 >
-> The spa's energy consumption and usage metrics are not accurate and are most
-> likely incorrect, as I have not been able to fully reverse engineer these aspects
-> of the API.
+> The spa's energy consumption estimates (watts, power draw) are not accurate
+> and are most likely incorrect, as the power calculation registers have not
+> been fully reverse-engineered. System uptime is derived from a firmware
+> counter (`jet_1_ON_sec`) that appears to track motherboard operational time,
+> but this is an empirical observation and may differ across spa models.
 
 ## About
 
