@@ -907,19 +907,6 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert "energy_savings" in updated
         assert "versions" in updated
 
-    def test_system_uptime_properties(
-        self, status_response: dict[str, object]
-    ) -> None:
-        """Test system_uptime on Spa."""
-        spa = Spa(status_response)
-        assert spa.system_uptime_seconds == 1061668
-        assert spa.system_uptime_days == 12.3
-
-        # Empty spa defaults
-        empty_spa = Spa({})
-        assert empty_spa.system_uptime_seconds == 0
-        assert empty_spa.system_uptime_days == 0.0
-
     def test_update_from_dict_non_dict_section(
         self, status_response: dict[str, object]
     ) -> None:

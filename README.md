@@ -16,9 +16,7 @@ Asynchronous Python client for Hot Spring Connected Spa Kit 2.
 >
 > The spa's energy consumption estimates (watts, power draw) are not accurate
 > and are most likely incorrect, as the power calculation registers have not
-> been fully reverse-engineered. System uptime is derived from a firmware
-> counter (`jet_1_ON_sec`) that appears to track motherboard operational time,
-> but this is an empirical observation and may differ across spa models.
+> been fully reverse-engineered.
 
 ## About
 
@@ -41,7 +39,7 @@ It is primarily designed to be used as the communication layer for an official
   ORP, sensor life)
 - **Diagnostics & Test Metrics** — Read raw hardware test point currents, line voltages,
   sensor flow/switch states, and failure diagnostics
-- **Runtime Tracking** — Cumulative heater runtime in hours and lifetime spa uptime in days
+- **Runtime Tracking** — Cumulative heater runtime and individual jet pump runtime in hours
 - **Connection monitoring** — Check LoRA bridge and cloud connectivity status
 - **Energy saving schedules** — View configured energy saving time windows
 - **Clean cycle** — Start or stop the 10-minute clean cycle
