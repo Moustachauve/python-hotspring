@@ -470,7 +470,7 @@ class Jet:
                 # The ESP32 firmware tracks runtime using an unsigned 32-bit counter
                 # in units of 1/256 seconds (Q24.8 fixed-point), but formats it as a
                 # signed 32-bit integer (`%d`) in the JSON output. Once runtime
-                # exceeds 2^31 ticks (~9.7 days), it overflows into a negative value.
+                # exceeds 2^31 ticks (~97.1 days), it overflows into a negative value.
                 # Masking with `& 0xFFFFFFFF` restores the true unsigned 32-bit counter
                 # before dividing by 256 to convert to whole elapsed seconds.
                 kwargs["on_seconds"] = (

@@ -118,7 +118,7 @@ def print_diagnostics(s: Spa) -> None:
     print(f"Jet 3 Volts:    {s.diagnostics.jet3_volts:.1f} V")
     print(f"Frequency:      {s.diagnostics.power_frequency} Hz")
     print(f"Circ Flow:      {s.diagnostics.circulation_pump_flow_status}")
-    print(f"Pressure Switch:{s.diagnostics.pressure_switch_status}")
+    print(f"Pressure Switch: {s.diagnostics.pressure_switch_status}")
 
     print("\n" + "=" * 20)
     print("  RAW TEST METRICS")
