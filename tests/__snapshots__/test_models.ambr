@@ -44,23 +44,23 @@
     spa_failure_state=<SpaFailureState.OK: 'Spa_Ok'>,
   )
 # ---
-# name: TestEnergySaving.test_list_from_dict
-  list([
-    EnergySaving(
+# name: TestEnergySaving.test_dict_from_dict
+  dict({
+    1: EnergySaving(
       duration=0,
       mode=0,
       schedule_id=1,
       start_hour=0,
       start_minute=0,
     ),
-    EnergySaving(
+    2: EnergySaving(
       duration=0,
       mode=0,
       schedule_id=2,
       start_hour=0,
       start_minute=0,
     ),
-  ])
+  })
 # ---
 # name: TestFreshWaterIQ.test_from_fwiq_endpoint
   FreshWaterIQ(
@@ -95,6 +95,37 @@
     temperature_unit=<TemperatureUnit.FAHRENHEIT: 'DegF'>,
   )
 # ---
+# name: TestJet.test_dict_from_dict
+  dict({
+    1: Jet(
+      concurrent_mode=False,
+      current=0.0,
+      is_enabled=True,
+      jet_id=1,
+      on_seconds=1061668,
+      speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
+      speed_type=<JetSpeedType.DUAL_SPEED: 'dualSpeed'>,
+    ),
+    2: Jet(
+      concurrent_mode=False,
+      current=0.0,
+      is_enabled=True,
+      jet_id=2,
+      on_seconds=0,
+      speed=<JetSpeed.OFF: 'off'>,
+      speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
+    ),
+    3: Jet(
+      concurrent_mode=False,
+      current=0.0,
+      is_enabled=False,
+      jet_id=3,
+      on_seconds=0,
+      speed=<JetSpeed.OFF: 'off'>,
+      speed_type=<JetSpeedType.UNKNOWN: 'unknown'>,
+    ),
+  })
+# ---
 # name: TestJet.test_jet3_concurrent_and_current
   Jet(
     concurrent_mode=True,
@@ -105,37 +136,6 @@
     speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
     speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
   )
-# ---
-# name: TestJet.test_list_from_dict
-  list([
-    Jet(
-      concurrent_mode=False,
-      current=0.0,
-      is_enabled=True,
-      jet_id=1,
-      on_seconds=1061668,
-      speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
-      speed_type=<JetSpeedType.DUAL_SPEED: 'dualSpeed'>,
-    ),
-    Jet(
-      concurrent_mode=False,
-      current=0.0,
-      is_enabled=True,
-      jet_id=2,
-      on_seconds=0,
-      speed=<JetSpeed.OFF: 'off'>,
-      speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
-    ),
-    Jet(
-      concurrent_mode=False,
-      current=0.0,
-      is_enabled=False,
-      jet_id=3,
-      on_seconds=0,
-      speed=<JetSpeed.OFF: 'off'>,
-      speed_type=<JetSpeedType.UNKNOWN: 'unknown'>,
-    ),
-  ])
 # ---
 # name: TestLightZone.test_custom_rgb_from_payload
   LightZone(
@@ -152,9 +152,9 @@
     zone_id=1,
   )
 # ---
-# name: TestLightZone.test_list_from_dict
-  list([
-    LightZone(
+# name: TestLightZone.test_dict_from_dict
+  dict({
+    1: LightZone(
       c_blue=0,
       c_green=0,
       c_red=0,
@@ -167,7 +167,7 @@
       rgb_state='inactive',
       zone_id=1,
     ),
-    LightZone(
+    2: LightZone(
       c_blue=0,
       c_green=0,
       c_red=0,
@@ -180,7 +180,7 @@
       rgb_state='inactive',
       zone_id=2,
     ),
-    LightZone(
+    3: LightZone(
       c_blue=0,
       c_green=0,
       c_red=0,
@@ -193,7 +193,7 @@
       rgb_state='inactive',
       zone_id=3,
     ),
-    LightZone(
+    4: LightZone(
       c_blue=0,
       c_green=0,
       c_red=0,
@@ -206,7 +206,7 @@
       rgb_state='inactive',
       zone_id=4,
     ),
-  ])
+  })
 # ---
 # name: TestLogoLight.test_from_dict
   LogoLight(
@@ -246,22 +246,22 @@
       small_loads_power='0',
       spa_failure_state=<SpaFailureState.UNKNOWN: 'unknown'>,
     ),
-    energy_savings=list([
-      EnergySaving(
+    energy_savings=dict({
+      1: EnergySaving(
         duration=0,
         mode=0,
         schedule_id=1,
         start_hour=0,
         start_minute=0,
       ),
-      EnergySaving(
+      2: EnergySaving(
         duration=0,
         mode=0,
         schedule_id=2,
         start_hour=0,
         start_minute=0,
       ),
-    ]),
+    }),
     freshwater_iq=FreshWaterIQ(
       chlorine=3.2,
       conductivity=1500,
@@ -294,8 +294,8 @@
       sna_ready=False,
       volume=0,
     ),
-    jets=list([
-      Jet(
+    jets=dict({
+      1: Jet(
         concurrent_mode=False,
         current=0.0,
         is_enabled=True,
@@ -304,7 +304,7 @@
         speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
         speed_type=<JetSpeedType.DUAL_SPEED: 'dualSpeed'>,
       ),
-      Jet(
+      2: Jet(
         concurrent_mode=False,
         current=0.0,
         is_enabled=True,
@@ -313,7 +313,7 @@
         speed=<JetSpeed.OFF: 'off'>,
         speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
       ),
-      Jet(
+      3: Jet(
         concurrent_mode=False,
         current=0.0,
         is_enabled=False,
@@ -322,9 +322,9 @@
         speed=<JetSpeed.OFF: 'off'>,
         speed_type=<JetSpeedType.UNKNOWN: 'unknown'>,
       ),
-    ]),
-    light_zones=list([
-      LightZone(
+    }),
+    light_zones=dict({
+      1: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -337,7 +337,7 @@
         rgb_state='inactive',
         zone_id=1,
       ),
-      LightZone(
+      2: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -350,7 +350,7 @@
         rgb_state='inactive',
         zone_id=2,
       ),
-      LightZone(
+      3: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -363,7 +363,7 @@
         rgb_state='inactive',
         zone_id=3,
       ),
-      LightZone(
+      4: LightZone(
         c_blue=0,
         c_green=0,
         c_red=0,
@@ -376,7 +376,7 @@
         rgb_state='inactive',
         zone_id=4,
       ),
-    ]),
+    }),
     logo_light=LogoLight(
       brightness=<BrightnessLevel.LEVEL_2: 'brightness_level_2'>,
     ),

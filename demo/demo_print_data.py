@@ -52,7 +52,7 @@ def print_heater_and_jets(s: Spa) -> None:
     print("\n" + "=" * 20)
     print("  JETS & BLOWER")
     print("=" * 20)
-    for jet in s.jets:
+    for jet in s.jets.values():
         supported = "/".join(sp.value for sp in jet.supported_speeds)
         extra = ""
         if jet.concurrent_mode:
@@ -73,7 +73,7 @@ def print_lighting_and_watercare(s: Spa) -> None:
     print("\n" + "=" * 20)
     print("  LIGHTING")
     print("=" * 20)
-    for zone in s.light_zones:
+    for zone in s.light_zones.values():
         print(
             f"Zone {zone.zone_id}: On={zone.is_on!s:5} Color={zone.color.value:10} "
             f"Intensity={zone.intensity} Enabled={zone.is_enabled}"

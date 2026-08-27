@@ -38,7 +38,7 @@ async def main() -> None:
         await spa.update()
         assert spa.spa is not None
 
-        zone1 = next((z for z in spa.spa.light_zones if z.zone_id == 1), None)
+        zone1 = spa.spa.light_zones.get(1)
         original_color = zone1.color if zone1 else LightColor.BLUE
         original_intensity = zone1.intensity if zone1 else 5
         original_is_on = zone1.is_on if zone1 else False

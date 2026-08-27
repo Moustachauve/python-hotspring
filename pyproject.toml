@@ -22,6 +22,7 @@ packages = [
 ]
 readme = "README.md"
 repository = "https://github.com/Moustachauve/python-hotspring"
+# The CI/CD and GitHub Actions release workflows are responsible for setting the version tag
 version = "0.1.0"
 
 [tool.poetry.dependencies]

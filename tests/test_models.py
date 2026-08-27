@@ -35,7 +35,6 @@ from hotspring.models import (
     SpaTestData,
     Versions,
     WaterCare,
-    _merge_entities,
     _parse_temperature,
 )
 
@@ -180,27 +179,27 @@ class TestHeater:
 class TestJet:
     """Tests for Jet model parsing."""
 
-    def test_list_from_dict(
+    def test_dict_from_dict(
         self, status_response: dict[str, object], snapshot: SnapshotAssertion
     ) -> None:
         """Test parsing all jets from status response."""
-        jets = Jet.list_from_dict(status_response["JET"])  # type: ignore[arg-type]
+        jets = Jet.dict_from_dict(status_response["JET"])  # type: ignore[arg-type]
         assert jets == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing jets from empty dict."""
-        jets = Jet.list_from_dict({})
-        assert jets == []
+        jets = Jet.dict_from_dict({})
+        assert not jets
 
-    def test_jets_sorted_by_id(self) -> None:
-        """Test that jets are sorted by ID."""
+    def test_jets_dict_keys(self) -> None:
+        """Test that jets are keyed by ID."""
         data = {
             "JET3": {"config": {}, "status": {"speed": "off"}},
             "JET1": {"config": {}, "status": {"speed": "off"}},
         }
-        jets = Jet.list_from_dict(data)  # type: ignore[arg-type]
-        assert jets[0].jet_id == 1
-        assert jets[1].jet_id == 3
+        jets = Jet.dict_from_dict(data)  # type: ignore[arg-type]
+        assert jets[1].jet_id == 1
+        assert jets[3].jet_id == 3
 
     def test_jet3_concurrent_and_current(self, snapshot: SnapshotAssertion) -> None:
         """Test parsing Jet 3 concurrent mode and electrical current."""
@@ -291,17 +290,17 @@ class TestBlower:
 class TestLightZone:
     """Tests for LightZone model parsing."""
 
-    def test_list_from_dict(
+    def test_dict_from_dict(
         self, status_response: dict[str, object], snapshot: SnapshotAssertion
     ) -> None:
         """Test parsing all light zones from status response."""
-        zones = LightZone.list_from_dict(status_response["lights"])  # type: ignore[arg-type]
+        zones = LightZone.dict_from_dict(status_response["lights"])  # type: ignore[arg-type]
         assert zones == snapshot
 
     def test_from_empty_dict(self) -> None:
         """Test parsing light zones from empty dict."""
-        zones = LightZone.list_from_dict({})
-        assert zones == []
+        zones = LightZone.dict_from_dict({})
+        assert not zones
 
     def test_is_on_based_on_intensity(self) -> None:
         """Test that is_on evaluates based on intensity > 0."""
@@ -468,11 +467,11 @@ class TestFreshWaterIQ:
 class TestEnergySaving:
     """Tests for EnergySaving model parsing."""
 
-    def test_list_from_dict(
+    def test_dict_from_dict(
         self, status_response: dict[str, object], snapshot: SnapshotAssertion
     ) -> None:
         """Test parsing energy saving schedules."""
-        schedules = EnergySaving.list_from_dict(status_response["energySavings"])  # type: ignore[arg-type]
+        schedules = EnergySaving.dict_from_dict(status_response["energySavings"])  # type: ignore[arg-type]
         assert schedules == snapshot
 
     def test_from_dict_and_is_enabled(self) -> None:
@@ -515,9 +514,9 @@ class TestEnergySaving:
         assert s_off.saving_mode == EnergySavingMode.OFF
         assert s_off.start_hour == 10
 
-    def test_list_from_control_dict(self) -> None:
-        """Test EnergySaving list_from_dict with control wrapper."""
-        schedules = EnergySaving.list_from_dict(
+    def test_dict_from_control_dict(self) -> None:
+        """Test EnergySaving dict_from_dict with control wrapper."""
+        schedules = EnergySaving.dict_from_dict(
             {
                 "control": {
                     "energySaving1": {"control": {"mode": "on", "startHour": "8"}}
@@ -525,10 +524,10 @@ class TestEnergySaving:
             }
         )
         assert len(schedules) == 1
-        assert schedules[0].schedule_id == 1
-        assert schedules[0].is_enabled is True
-        assert schedules[0].saving_mode == EnergySavingMode.ON
-        assert schedules[0].start_hour == 8
+        assert schedules[1].schedule_id == 1
+        assert schedules[1].is_enabled is True
+        assert schedules[1].saving_mode == EnergySavingMode.ON
+        assert schedules[1].start_hour == 8
 
 
 class TestVersions:
@@ -978,8 +977,8 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         updated = spa.update_from_dict(payload)
         assert updated == {"energy_savings"}
         assert len(spa.energy_savings) == initial_len
-        assert spa.energy_savings[0].start_hour == 10
-        assert spa.energy_savings[0].duration == 120
+        assert spa.energy_savings[1].start_hour == 10
+        assert spa.energy_savings[1].duration == 120
 
     def test_partial_update_single_light_zone(
         self, status_response: dict[str, object]
@@ -987,8 +986,8 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         """Test that updating a single light zone preserves other zones."""
         spa = Spa(status_response)
         assert len(spa.light_zones) == 4
-        assert spa.light_zones[0].color == LightColor.BLUE
-        assert spa.light_zones[1].zone_id == 2
+        assert spa.light_zones[1].color == LightColor.BLUE
+        assert spa.light_zones[2].zone_id == 2
 
         # Simulate a command response containing only Zone 1
         partial_payload: dict[str, object] = {
@@ -1013,18 +1012,18 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         # Zone 1 should be updated to custom Cyan with intensity 4
         # while preserving is_enabled
         assert len(spa.light_zones) == 4
-        assert spa.light_zones[0].intensity == 4
-        assert spa.light_zones[0].color == LightColor.CUSTOM
-        assert spa.light_zones[0].c_red == 0
-        assert spa.light_zones[0].c_green == 255
-        assert spa.light_zones[0].c_blue == 255
-        assert spa.light_zones[0].rgb_state == "active"
-        assert spa.light_zones[0].is_enabled is True
+        assert spa.light_zones[1].intensity == 4
+        assert spa.light_zones[1].color == LightColor.CUSTOM
+        assert spa.light_zones[1].c_red == 0
+        assert spa.light_zones[1].c_green == 255
+        assert spa.light_zones[1].c_blue == 255
+        assert spa.light_zones[1].rgb_state == "active"
+        assert spa.light_zones[1].is_enabled is True
 
         # Other zones should be preserved intact
-        assert spa.light_zones[1].zone_id == 2
-        assert spa.light_zones[2].zone_id == 3
-        assert spa.light_zones[3].zone_id == 4
+        assert spa.light_zones[2].zone_id == 2
+        assert spa.light_zones[3].zone_id == 3
+        assert spa.light_zones[4].zone_id == 4
 
     def test_partial_update_light_zone_switch_from_custom_to_preset(
         self, status_response: dict[str, object]
@@ -1047,8 +1046,8 @@ class TestSpa:  # pylint: disable=too-many-public-methods
                 }
             }
         )
-        assert spa.light_zones[0].color == LightColor.CUSTOM
-        assert spa.light_zones[0].rgb_state == "active"
+        assert spa.light_zones[1].color == LightColor.CUSTOM
+        assert spa.light_zones[1].rgb_state == "active"
 
         # Now send a partial update setting color to GREEN without RGBstate
         spa.update_from_dict(
@@ -1062,8 +1061,8 @@ class TestSpa:  # pylint: disable=too-many-public-methods
                 }
             }
         )
-        assert spa.light_zones[0].color == LightColor.GREEN
-        assert spa.light_zones[0].rgb_state == "inactive"
+        assert spa.light_zones[1].color == LightColor.GREEN
+        assert spa.light_zones[1].rgb_state == "inactive"
 
     def test_partial_update_single_jet(
         self, status_response: dict[str, object]
@@ -1071,8 +1070,8 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         """Test updating a single jet preserves other jets and omitted fields."""
         spa = Spa(status_response)
         assert len(spa.jets) == 3
-        assert spa.jets[0].speed == JetSpeed.HIGH_SPEED
-        initial_on_seconds = spa.jets[0].on_seconds
+        assert spa.jets[1].speed == JetSpeed.HIGH_SPEED
+        initial_on_seconds = spa.jets[1].on_seconds
         assert initial_on_seconds > 0
 
         # Simulate a command response updating JET1 to off
@@ -1090,11 +1089,11 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert updated == {"jets"}
 
         assert len(spa.jets) == 3
-        assert spa.jets[0].speed == JetSpeed.OFF
-        assert spa.jets[0].is_enabled is True
-        assert spa.jets[0].on_seconds == initial_on_seconds
-        assert spa.jets[1].jet_id == 2
-        assert spa.jets[2].jet_id == 3
+        assert spa.jets[1].speed == JetSpeed.OFF
+        assert spa.jets[1].is_enabled is True
+        assert spa.jets[1].on_seconds == initial_on_seconds
+        assert spa.jets[2].jet_id == 2
+        assert spa.jets[3].jet_id == 3
 
     def test_partial_update_versions(self, status_response: dict[str, object]) -> None:
         """Test updating product versions partially retains cached fields."""
@@ -1117,91 +1116,37 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert spa.versions.control_box == "EG25.2100K0"
         assert spa.versions.control_panel == "HT25.1102F0"
 
-    def test_merge_entities_union_and_append(self) -> None:
-        """Test _merge_entities union (replace matching, retain, append new)."""
-        existing = [
-            Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
-            Jet(jet_id=2, speed=JetSpeed.OFF, is_enabled=True, on_seconds=200),
-        ]
-        incoming = [
-            Jet(jet_id=2, speed=JetSpeed.HIGH_SPEED, is_enabled=True, on_seconds=250),
-            Jet(jet_id=3, speed=JetSpeed.LOW_SPEED, is_enabled=True, on_seconds=50),
-        ]
-
-        result = _merge_entities(existing, incoming, lambda j: j.jet_id)
-        assert len(result) == 3
-        assert result[0].jet_id == 1
-        assert result[0].speed == JetSpeed.OFF
-        assert result[1].jet_id == 2
-        assert result[1].speed == JetSpeed.HIGH_SPEED
-        assert result[2].jet_id == 3
-        assert result[2].speed == JetSpeed.LOW_SPEED
-
-    def test_merge_entities_with_duplicate_incoming_keys(self) -> None:
-        """Test _merge_entities deduplicates incoming keys cleanly."""
-        existing = [
-            Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
-        ]
-        incoming = [
-            Jet(jet_id=2, speed=JetSpeed.LOW_SPEED, is_enabled=True, on_seconds=50),
-            Jet(jet_id=2, speed=JetSpeed.HIGH_SPEED, is_enabled=True, on_seconds=100),
-        ]
-        result = _merge_entities(existing, incoming, lambda j: j.jet_id)
-        assert len(result) == 2
-        assert result[0].jet_id == 1
-        assert result[1].jet_id == 2
-        assert result[1].speed == JetSpeed.HIGH_SPEED
-
-    def test_merge_entities_empty_incoming(self) -> None:
-        """Test _merge_entities with empty incoming list returns existing."""
-        existing = [
-            Jet(jet_id=1, speed=JetSpeed.OFF, is_enabled=True, on_seconds=100),
-        ]
-        result = _merge_entities(existing, [], lambda j: j.jet_id)
-        assert result == existing
-
-    def test_merge_entities_empty_existing(self) -> None:
-        """Test _merge_entities with empty existing list deduplicates incoming."""
-        incoming = [
-            Jet(jet_id=1, speed=JetSpeed.LOW_SPEED, is_enabled=True, on_seconds=50),
-            Jet(jet_id=1, speed=JetSpeed.HIGH_SPEED, is_enabled=True, on_seconds=100),
-        ]
-        result = _merge_entities([], incoming, lambda j: j.jet_id)
-        assert len(result) == 1
-        assert result[0].jet_id == 1
-        assert result[0].speed == JetSpeed.HIGH_SPEED
-
-    def test_jet_list_from_dict_case_insensitive(self) -> None:
-        """Test Jet.list_from_dict parses case-insensitive keys."""
+    def test_jet_dict_from_dict_case_insensitive(self) -> None:
+        """Test Jet.dict_from_dict parses case-insensitive keys."""
         data: dict[str, object] = {
             "jet1": {"status": {"speed": "highSpeed"}},
             "Jet2": {"status": {"speed": "lowSpeed"}},
             "JET3": {"status": {"speed": "off"}},
         }
-        jets = Jet.list_from_dict(data)
+        jets = Jet.dict_from_dict(data)
         assert len(jets) == 3
-        assert jets[0].jet_id == 1
-        assert jets[0].speed == JetSpeed.HIGH_SPEED
-        assert jets[1].jet_id == 2
-        assert jets[1].speed == JetSpeed.LOW_SPEED
-        assert jets[2].jet_id == 3
-        assert jets[2].speed == JetSpeed.OFF
+        assert jets[1].jet_id == 1
+        assert jets[1].speed == JetSpeed.HIGH_SPEED
+        assert jets[2].jet_id == 2
+        assert jets[2].speed == JetSpeed.LOW_SPEED
+        assert jets[3].jet_id == 3
+        assert jets[3].speed == JetSpeed.OFF
 
-    def test_light_zone_list_from_dict_case_insensitive(self) -> None:
-        """Test LightZone.list_from_dict parses case-insensitive keys."""
+    def test_light_zone_dict_from_dict_case_insensitive(self) -> None:
+        """Test LightZone.dict_from_dict parses case-insensitive keys."""
         data: dict[str, object] = {
             "Zone1": {"status": {"color": "BLUE", "Intensity": 3}},
             "ZONE2": {"status": {"color": "RED", "Intensity": 4}},
             "zone3": {"status": {"color": "GREEN", "Intensity": 5}},
         }
-        zones = LightZone.list_from_dict(data)
+        zones = LightZone.dict_from_dict(data)
         assert len(zones) == 3
-        assert zones[0].zone_id == 1
-        assert zones[0].color == LightColor.BLUE
-        assert zones[1].zone_id == 2
-        assert zones[1].color == LightColor.RED
-        assert zones[2].zone_id == 3
-        assert zones[2].color == LightColor.GREEN
+        assert zones[1].zone_id == 1
+        assert zones[1].color == LightColor.BLUE
+        assert zones[2].zone_id == 2
+        assert zones[2].color == LightColor.RED
+        assert zones[3].zone_id == 3
+        assert zones[3].color == LightColor.GREEN
 
     def test_update_info_startup(self, startup_response: dict[str, object]) -> None:
         """Test updating spa info from startup response."""
@@ -1346,12 +1291,12 @@ class TestControlResponseParsing:
         assert jet_unknown.speed == JetSpeed.HIGH_SPEED
 
         # Nested in control dict
-        jets = Jet.list_from_dict(
+        jets = Jet.dict_from_dict(
             {"control": {"JET1": {"control": "highSpeed"}, "JET2": {"control": "off"}}}
         )
         assert len(jets) == 2
-        assert jets[0].speed == JetSpeed.HIGH_SPEED
-        assert jets[1].speed == JetSpeed.OFF
+        assert jets[1].speed == JetSpeed.HIGH_SPEED
+        assert jets[2].speed == JetSpeed.OFF
 
     def test_blower_control_payload(self) -> None:
         """Test parsing blower control responses."""
@@ -1412,11 +1357,11 @@ class TestControlResponseParsing:
         assert zone_rgb.rgb_state == "active"
 
         # Nested in control dict
-        zones = LightZone.list_from_dict(
+        zones = LightZone.dict_from_dict(
             {"control": {"Zone1": {"control": {"IntensityAbs": 2}}}}
         )
         assert len(zones) == 1
-        assert zones[0].intensity == 2
+        assert zones[1].intensity == 2
 
     def test_logo_light_control_payload(self) -> None:
         """Test parsing logo light control responses."""
@@ -1488,14 +1433,14 @@ class TestControlResponseParsing:
             {"JET": {"control": {"JET1": {"control": "highSpeed"}}}}
         )
         assert "jets" in updated_jet
-        assert spa.jets[0].speed == JetSpeed.HIGH_SPEED
+        assert spa.jets[1].speed == JetSpeed.HIGH_SPEED
 
         # Partial light control echo
         updated_light = spa.update_from_dict(
             {"lights": {"control": {"Zone1": {"control": {"color": "BLUE"}}}}}
         )
         assert "light_zones" in updated_light
-        assert spa.light_zones[0].color == LightColor.BLUE
+        assert spa.light_zones[1].color == LightColor.BLUE
 
         # Partial waterCare control echo
         updated_wc = spa.update_from_dict(
@@ -1543,6 +1488,6 @@ class TestControlResponseParsing:
             }
         )
         assert "energy_savings" in updated_es
-        assert spa.energy_savings[0].is_enabled is True
-        assert spa.energy_savings[0].start_hour == 14
-        assert spa.energy_savings[0].duration == 4
+        assert spa.energy_savings[1].is_enabled is True
+        assert spa.energy_savings[1].start_hour == 14
+        assert spa.energy_savings[1].duration == 4

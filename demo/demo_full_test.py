@@ -51,7 +51,7 @@ async def main() -> None:
 
         print("\nTesting light color...")
         # Get current color first
-        zone1 = next((z for z in spa.spa.light_zones if z.zone_id == 1), None)
+        zone1 = spa.spa.light_zones.get(1)
         current_color = zone1.color if zone1 else None
         print(f"Current color: {current_color}")
 
@@ -61,7 +61,7 @@ async def main() -> None:
         await asyncio.sleep(2)
         await spa.update()
         assert spa.spa is not None
-        zone1 = next((z for z in spa.spa.light_zones if z.zone_id == 1), None)
+        zone1 = spa.spa.light_zones.get(1)
         print(f"New color: {zone1.color if zone1 else None}")
 
         if current_color and current_color.value != "unknown":
