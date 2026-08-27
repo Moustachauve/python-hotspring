@@ -76,9 +76,28 @@ class Spa:
         self.info = SpaInfo()
         self.connection_status = ConnectionStatus()
         self.diagnostics = Diagnostics()
-
         if data:
             self.update_from_dict(data)
+
+    @property
+    def system_uptime_seconds(self) -> int:
+        """Return total operational lifetime running seconds of the spa.
+
+        In the IQ2020 / HNA firmware, `jet_1_ON_sec` increments continuously
+        whenever the spa motherboard is powered on (matching cumulative days since
+        installation), whereas `jet_2_ON_sec` and other jets only increment when
+        their respective pump is actively running. We assume `jet_1_ON_sec` serves
+        as the system-wide motherboard operational uptime counter, though this is
+        an empirical assumption and might differ across other spa models/firmware.
+        """
+        if self.jets and self.jets[0].jet_id == 1:
+            return self.jets[0].on_seconds
+        return 0
+
+    @property
+    def system_uptime_days(self) -> float:
+        """Return total operational lifetime running time of the spa in days."""
+        return round(self.system_uptime_seconds / 86400.0, 1)
 
     def update_from_dict(self, data: dict[str, object]) -> set[str]:
         """Update the Spa object from a /status response or partial command response.
@@ -329,6 +348,11 @@ class Heater:  # pylint: disable=too-many-instance-attributes
     current_temperature: float | None = None
     temperature_unit: TemperatureUnit = TemperatureUnit.UNKNOWN
 
+    @property
+    def heater_on_hours(self) -> float:
+        """Return cumulative heater runtime in hours."""
+        return round(self.heater_on_seconds / 3600.0, 2)
+
     @staticmethod
     def from_dict(data: dict[str, object], existing: Heater | None = None) -> Heater:
         """Create a Heater from API response data.
@@ -397,6 +421,11 @@ class Jet:
             return [JetSpeed.OFF, JetSpeed.LOW_SPEED, JetSpeed.HIGH_SPEED]
         return [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
 
+    @property
+    def on_hours(self) -> float:
+        """Return cumulative jet runtime in hours."""
+        return round(self.on_seconds / 3600.0, 2)
+
     @staticmethod
     def from_dict(
         jet_id: int,
@@ -438,7 +467,15 @@ class Jet:
                 kwargs["current"] = int(status.get("current", 0)) / 2560.0
             on_sec_key = f"jet_{jet_id}_ON_sec"
             if on_sec_key in status:
-                kwargs["on_seconds"] = max(0, int(status.get(on_sec_key, 0))) // 256
+                # The ESP32 firmware tracks runtime using an unsigned 32-bit counter
+                # in units of 1/256 seconds (Q24.8 fixed-point), but formats it as a
+                # signed 32-bit integer (`%d`) in the JSON output. Once runtime
+                # exceeds 2^31 ticks (~9.7 days), it overflows into a negative value.
+                # Masking with `& 0xFFFFFFFF` restores the true unsigned 32-bit counter
+                # before dividing by 256 to convert to whole elapsed seconds.
+                kwargs["on_seconds"] = (
+                    int(status.get(on_sec_key, 0)) & 0xFFFFFFFF
+                ) // 256
 
         control = data.get("control")
         if isinstance(control, str):
@@ -1082,6 +1119,9 @@ class SpaTestData:
                 kwargs["temp_offset"] = float(status.get("tempOffset", 0.0))
             if "VsenseCal" in status:
                 kwargs["vsense_cal"] = float(status.get("VsenseCal", 0.0))
+            # Current metrics are encoded in Q8.8 fixed-point deciapps (0.1 A units
+            # left-shifted by 8 bits / multiplied by 256).
+            # Dividing by 2560.0 (256 * 10) scales the raw integer to Amperes (A).
             if "jet1+jet2+blowerCurrent" in status:
                 kwargs["jet1_jet2_blower_current"] = (
                     int(status.get("jet1+jet2+blowerCurrent", 0)) / 2560.0
@@ -1112,6 +1152,9 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
     heater_error: str = "0"
     power_frequency: str = "0"
     pressure_switch_status: str = "0"
+    circulation_pump_flow_status: str = "0"
+    regulation_thermistor_temp_status: str = "0"
+    limit_thermistor_status: str = "0"
     l1_n_volts: float = 0.0
     l2_n_volts: float = 0.0
     heater_volts: float = 0.0
@@ -1153,6 +1196,9 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
             "heaterError": "heater_error",
             "powerFrequency": "power_frequency",
             "pressureSwitchStatus": "pressure_switch_status",
+            "circulationPumpFlowStatus": "circulation_pump_flow_status",
+            "regulationThermistorTempStatus": "regulation_thermistor_temp_status",
+            "limitThermistorStatus": "limit_thermistor_status",
             "jet1_jet2_blowerPower": "jet1_jet2_blower_power",
             "smallLoadsPower": "small_loads_power",
             "heaterPower": "heater_power",
@@ -1166,6 +1212,8 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
         for json_key, attr in str_keys.items():
             if json_key in debug:
                 kwargs[attr] = str(debug[json_key])
+        # Voltage registers use Q11.5 fixed-point format (1/32 V resolution).
+        # Dividing raw integer by 32.0 converts to Volts.
         for json_key, attr in volt_keys.items():
             if json_key in debug:
                 kwargs[attr] = int(debug.get(json_key) or 0) / 32.0
@@ -1256,9 +1304,16 @@ def _parse_heater_status(status: dict[str, object]) -> dict[str, object]:
         if mode != HeatingMode.UNKNOWN:
             kwargs["heating_mode"] = mode
     if "heaterCurrent" in status:
+        # Motherboard current registers use Q8.8 fixed point in deciapps (0.1 A):
+        # raw / 256 / 10.0 = raw / 2560.0 Amperes.
         kwargs["heater_current"] = int(status.get("heaterCurrent", 0)) / 2560.0
     if "heaterHours" in status:
-        kwargs["heater_on_seconds"] = int(status.get("heaterHours", 0)) // 256
+        # Like jet runtime counters, `heaterHours` is an unsigned 32-bit counter
+        # in 1/256 seconds (Q24.8) formatted as signed `%d` in ESP32 JSON.
+        # Mask with `& 0xFFFFFFFF` to handle 32-bit integer overflow and divide by 256.
+        kwargs["heater_on_seconds"] = (
+            int(status.get("heaterHours", 0)) & 0xFFFFFFFF
+        ) // 256
     kwargs.update(_parse_heater_temperatures(status))
     return kwargs
 

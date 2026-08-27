@@ -13,6 +13,10 @@ Asynchronous Python client for Hot Spring Connected Spa Kit 2.
 > This library is currently in heavy development. Not all features might work
 > perfectly, and some features may not be fully tested as they depend on the
 > physical hardware available for testing.
+>
+> The spa's energy consumption and usage metrics are not accurate and are most
+> likely incorrect, as I have not been able to fully reverse engineer these aspects
+> of the API.
 
 ## About
 
@@ -33,17 +37,12 @@ It is primarily designed to be used as the communication layer for an official
   plus the logo light
 - **Water care** — Monitor FreshWater IQ salt system metrics (pH, chlorine,
   ORP, sensor life)
-- **Diagnostics** — Read voltage, power consumption, and failure states
+- **Diagnostics & Test Metrics** — Read raw hardware test point currents, line voltages,
+  sensor flow/switch states, and failure diagnostics
+- **Runtime Tracking** — Cumulative heater runtime in hours and lifetime spa uptime in days
 - **Connection monitoring** — Check LoRA bridge and cloud connectivity status
 - **Energy saving schedules** — View configured energy saving time windows
 - **Clean cycle** — Start or stop the 10-minute clean cycle
-
-> [!CAUTION]
-> The spa's energy consumption and usage metrics are not always accurate. Most
-> values related to power (including current, amp, volt, etc) and values based
-> on time (like the amount of time the jet have been turned on) are most likely
-> incorrect, as I have not been able to fully reverse engineer these aspects of
-> the API.
 
 ### Compatible Spas
 
