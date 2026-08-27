@@ -169,8 +169,6 @@
     spa_lock=SpaLock(
       is_locked=False,
     ),
-    system_uptime_days=12.3,
-    system_uptime_seconds=1061668,
     test_metrics=SpaTestData(
       heater_current=7.5,
       heater_test_status='off',

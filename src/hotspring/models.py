@@ -79,26 +79,6 @@ class Spa:
         if data:
             self.update_from_dict(data)
 
-    @property
-    def system_uptime_seconds(self) -> int:
-        """Return total operational lifetime running seconds of the spa.
-
-        In the IQ2020 / HNA firmware, `jet_1_ON_sec` increments continuously
-        whenever the spa motherboard is powered on (matching cumulative days since
-        installation), whereas `jet_2_ON_sec` and other jets only increment when
-        their respective pump is actively running. We assume `jet_1_ON_sec` serves
-        as the system-wide motherboard operational uptime counter, though this is
-        an empirical assumption and might differ across other spa models/firmware.
-        """
-        if self.jets and self.jets[0].jet_id == 1:
-            return self.jets[0].on_seconds
-        return 0
-
-    @property
-    def system_uptime_days(self) -> float:
-        """Return total operational lifetime running time of the spa in days."""
-        return round(self.system_uptime_seconds / 86400.0, 1)
-
     def update_from_dict(self, data: dict[str, object]) -> set[str]:
         """Update the Spa object from a /status response or partial command response.
 

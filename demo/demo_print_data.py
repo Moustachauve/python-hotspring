@@ -31,9 +31,6 @@ def print_identity(s: Spa) -> None:
     print(f"Model Name:     {s.info.model_name} (ID: {s.info.model_id})")
     print(f"Volume:         {s.info.volume} gallons")
     print(f"SNA Ready:      {s.info.sna_ready}")
-    print(
-        f"System Uptime:  {s.system_uptime_days:.1f} days ({s.system_uptime_seconds} s)"
-    )
 
 
 def print_heater_and_jets(s: Spa) -> None:
