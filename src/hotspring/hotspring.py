@@ -24,6 +24,7 @@ from .exceptions import (
     HotSpringConnectionTimeoutError,
     HotSpringError,
     HotSpringNotReadyError,
+    HotSpringSNADetectedError,
 )
 from .models import (
     ConnectionStatus,
@@ -54,6 +55,7 @@ class HotSpring:
     host: str
     session: aiohttp.ClientSession | None = None
     request_timeout: float = 10.0
+    validate_device: bool = True
     _close_session: bool = False
     _identity_loaded: bool = False
     spa: Spa | None = None
@@ -181,6 +183,8 @@ class HotSpring:
 
         Raises:
         ------
+            HotSpringSNADetectedError: If connected to a Spa Network Adapter (SNA)
+                and ``validate_device`` is True.
             HotSpringError: If no data is returned from the spa.
 
         """
@@ -206,6 +210,15 @@ class HotSpring:
             if connect_res:
                 self.spa.update_connection_status(connect_res)
 
+            if self.validate_device and self.spa.info.is_sna:
+                msg = (
+                    f"Connected to Spa Network Adapter (SNA) with hostname "
+                    f"'{self.spa.info.hostname}'. The Home Network Adapter (HNA) "
+                    f"with root topic '{self.spa.info.root_topic}' must be "
+                    f"used instead."
+                )
+                raise HotSpringSNADetectedError(msg)
+
             self._identity_loaded = True
             return self.spa
 
@@ -224,6 +237,26 @@ class HotSpring:
 
         return self.spa
 
+    async def get_device_info(self) -> SpaInfo:
+        """Fetch lightweight device identity directly from /startup.
+
+        Useful for discovery and pre-flight device validation without querying
+        the spa controller or LoRA radio endpoints.
+
+        Returns
+        -------
+            A SpaInfo instance parsed from the /startup response.
+
+        Raises
+        ------
+            HotSpringConnectionError: If connection fails.
+            HotSpringConnectionTimeoutError: If request times out.
+            HotSpringError: If the response is invalid.
+
+        """
+        data = await self.request("/startup")
+        return SpaInfo.from_dict(data)
+
     async def update_identity(self) -> SpaInfo:
         """Fetch and update static spa identity info (/startup and /spamodel).
 
@@ -233,6 +266,8 @@ class HotSpring:
 
         Raises
         ------
+            HotSpringSNADetectedError: If connected to a Spa Network Adapter (SNA)
+                and ``validate_device`` is True.
             HotSpringError: If the spa has not been initialized with update().
 
         """
@@ -253,6 +288,15 @@ class HotSpring:
 
         if identity_data:
             self.spa.update_info(identity_data)
+
+        if self.validate_device and self.spa.info.is_sna:
+            msg = (
+                f"Connected to Spa Network Adapter (SNA) with hostname "
+                f"'{self.spa.info.hostname}'. The Home Network Adapter (HNA) "
+                f"with root topic '{self.spa.info.root_topic}' must be "
+                f"used instead."
+            )
+            raise HotSpringSNADetectedError(msg)
 
         self._identity_loaded = True
         return self.spa.info

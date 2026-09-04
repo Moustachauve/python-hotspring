@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from .const import (
     BrightnessLevel,
+    DeviceType,
     HeatingMode,
     JetSpeed,
     LightColor,
@@ -301,6 +302,44 @@ class SpaInfo:
         if len(mac_bytes) != 6:
             return ""
         return ":".join(f"{b:02X}" for b in mac_bytes)
+
+    @property
+    def device_type(self) -> DeviceType:
+        """Determine whether the device is an HNA or SNA.
+
+        The HNA (Home Network Adapter) is the intended API bridge.
+        The SNA (Spa Network Adapter) is the tub-side module.
+
+        On the HNA, the hostname suffix (last 6 characters, e.g. from
+        'ConnectedSpa_112233') matches the last 6 characters of the root_topic
+        (e.g. 'mySpaAABBCC112233').
+        On the SNA, root_topic still points to the paired HNA topic, but
+        the hostname reflects the SNA's own MAC address.
+
+        Returns
+        -------
+            DeviceType.HNA if hostname matches root_topic,
+            DeviceType.SNA if hostname differs from root_topic,
+            DeviceType.UNKNOWN if information is missing.
+
+        """
+        if not self.hostname or not self.root_topic:
+            return DeviceType.UNKNOWN
+
+        mac_suffix = self.hostname.rsplit("_", 1)[-1]
+        if self.root_topic.lower().endswith(mac_suffix.lower()):
+            return DeviceType.HNA
+        return DeviceType.SNA
+
+    @property
+    def is_hna(self) -> bool:
+        """Return True if this device is the Home Network Adapter (HNA)."""
+        return self.device_type == DeviceType.HNA
+
+    @property
+    def is_sna(self) -> bool:
+        """Return True if this device is the Spa Network Adapter (SNA)."""
+        return self.device_type == DeviceType.SNA
 
 
 @dataclass

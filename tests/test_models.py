@@ -6,6 +6,7 @@ import pytest
 
 from hotspring import (
     BrightnessLevel,
+    DeviceType,
     HeatingMode,
     JetSpeed,
     LightColor,
@@ -687,6 +688,64 @@ class TestSpaInfo:
         """Test SNA unknown state (real HNA reports this)."""
         info = SpaInfo.from_dict({"SNAready": "Unknown"})
         assert info.sna_ready is False
+
+    def test_device_type_hna(self) -> None:
+        """Test HNA device type detection when hostname matches root_topic."""
+        info = SpaInfo.from_dict(
+            {
+                "HOSTNAME": "ConnectedSpa_112233",
+                "rootTopic": "mySpaAABBCC112233",
+            }
+        )
+        assert info.device_type == DeviceType.HNA
+        assert info.is_hna is True
+        assert info.is_sna is False
+
+    def test_device_type_sna(self) -> None:
+        """Test SNA device type detection when hostname differs from root_topic."""
+        info = SpaInfo.from_dict(
+            {
+                "HOSTNAME": "ConnectedSpa_445566",
+                "rootTopic": "mySpaAABBCC112233",
+            }
+        )
+        assert info.device_type == DeviceType.SNA
+        assert info.is_hna is False
+        assert info.is_sna is True
+
+    @pytest.mark.parametrize(
+        ("hostname", "root_topic", "expected_type"),
+        [
+            ("ConnectedSpa_112233", "mySpaAABBCC112233", DeviceType.HNA),
+            ("ConnectedSpa_112233", "myspaaabbcc112233", DeviceType.HNA),
+            ("connectedspa_112233", "mySpaAABBCC112233", DeviceType.HNA),
+            ("ConnectedSpa_445566", "mySpaAABBCC112233", DeviceType.SNA),
+            ("ConnectedSpa_FFFFFF", "mySpa001122334455", DeviceType.SNA),
+            ("", "mySpaAABBCC112233", DeviceType.UNKNOWN),
+            ("ConnectedSpa_112233", "", DeviceType.UNKNOWN),
+            ("", "", DeviceType.UNKNOWN),
+        ],
+    )
+    def test_device_type_variants(
+        self,
+        hostname: str,
+        root_topic: str,
+        expected_type: DeviceType,
+    ) -> None:
+        """Test device type detection across various valid and edge cases."""
+        info = SpaInfo.from_dict({"HOSTNAME": hostname, "rootTopic": root_topic})
+        assert info.device_type == expected_type
+        assert info.is_hna is (expected_type == DeviceType.HNA)
+        assert info.is_sna is (expected_type == DeviceType.SNA)
+
+    def test_device_type_enum_build(self) -> None:
+        """Test DeviceType.build parses strings correctly."""
+        assert DeviceType.build("hna") == DeviceType.HNA
+        assert DeviceType.build("HNA") == DeviceType.HNA
+        assert DeviceType.build("sna") == DeviceType.SNA
+        assert DeviceType.build("SNA") == DeviceType.SNA
+        assert DeviceType.build(None) == DeviceType.UNKNOWN
+        assert DeviceType.build("invalid") == DeviceType.UNKNOWN
 
 
 class TestSpa:  # pylint: disable=too-many-public-methods
