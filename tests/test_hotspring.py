@@ -12,11 +12,14 @@ import pytest
 from aresponses import Response, ResponsesMockServer
 
 from hotspring import (
+    DeviceType,
     HotSpring,
     HotSpringCommandError,
     HotSpringConnectionError,
     HotSpringError,
+    HotSpringInvalidDeviceError,
     HotSpringNotReadyError,
+    HotSpringSNADetectedError,
 )
 from hotspring.const import (
     BrightnessLevel,
@@ -50,6 +53,7 @@ def _add_update_mocks(
     aresponses: ResponsesMockServer,
     *,
     startup_status: int = 200,
+    startup_fixture: str = "startup.json",
     connect_payload: str | None = None,
     spamodel_status: int = 200,
 ) -> None:
@@ -60,7 +64,7 @@ def _add_update_mocks(
         host,
         "/startup",
         "GET",
-        _json_response("startup.json", status=startup_status),
+        _json_response(startup_fixture, status=startup_status),
     )
     connect = connect_payload or _load("spa_connect_status.json")
     aresponses.add(
@@ -320,6 +324,96 @@ class TestUpdate:
 
         assert spa is not None
         assert spa.heater.is_on is True
+
+    async def test_update_sna_raises_sna_detected_error(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that update() raises on SNA connection."""
+        _add_update_mocks(aresponses, startup_fixture="startup_sna.json")
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            with pytest.raises(
+                HotSpringSNADetectedError,
+                match=r"Connected to Spa Network Adapter \(SNA\)",
+            ) as exc_info:
+                await client.update()
+
+        assert "ConnectedSpa_445566" in str(exc_info.value)
+        assert "mySpaAABBCC112233" in str(exc_info.value)
+        assert isinstance(exc_info.value, HotSpringInvalidDeviceError)
+
+    async def test_update_sna_allowed_when_validate_device_false(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that update() allows SNA when validate_device is False."""
+        _add_update_mocks(aresponses, startup_fixture="startup_sna.json")
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(
+                host="192.168.1.100", session=session, validate_device=False
+            )
+            spa = await client.update()
+
+        assert spa.info.hostname == "ConnectedSpa_445566"
+        assert spa.info.is_sna is True
+        assert spa.info.is_hna is False
+        assert spa.info.device_type == DeviceType.SNA
+
+    async def test_get_device_info_hna(self, aresponses: ResponsesMockServer) -> None:
+        """Test get_device_info() parses HNA startup response directly."""
+        aresponses.add(
+            "192.168.1.100",
+            "/startup",
+            "GET",
+            _json_response("startup.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            info = await client.get_device_info()
+
+        assert info.hostname == "ConnectedSpa_112233"
+        assert info.is_hna is True
+        assert info.is_sna is False
+        assert info.device_type == DeviceType.HNA
+
+    async def test_get_device_info_sna(self, aresponses: ResponsesMockServer) -> None:
+        """Test get_device_info() parses SNA startup response directly."""
+        aresponses.add(
+            "192.168.1.100",
+            "/startup",
+            "GET",
+            _json_response("startup_sna.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            info = await client.get_device_info()
+
+        assert info.hostname == "ConnectedSpa_445566"
+        assert info.is_hna is False
+        assert info.is_sna is True
+        assert info.device_type == DeviceType.SNA
+
+    async def test_update_identity_raises_sna_detected_error(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that update_identity() raises HotSpringSNADetectedError on SNA."""
+        _add_update_mocks(aresponses, startup_fixture="startup.json")
+        aresponses.add(
+            "192.168.1.100",
+            "/startup",
+            "GET",
+            _json_response("startup_sna.json"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/spamodel",
+            "GET",
+            _json_response("spamodel.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(HotSpringSNADetectedError):
+                await client.update_identity()
 
     async def test_cold_sync_status_failure_propagates(
         self, aresponses: ResponsesMockServer

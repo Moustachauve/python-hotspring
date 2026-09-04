@@ -2,6 +2,7 @@
 
 from .const import (
     BrightnessLevel,
+    DeviceType,
     EnergySavingMode,
     HeatingMode,
     JetSpeed,
@@ -17,7 +18,9 @@ from .exceptions import (
     HotSpringConnectionError,
     HotSpringConnectionTimeoutError,
     HotSpringError,
+    HotSpringInvalidDeviceError,
     HotSpringNotReadyError,
+    HotSpringSNADetectedError,
 )
 from .hotspring import HotSpring
 from .models import (
@@ -44,6 +47,7 @@ __all__ = [
     "BrightnessLevel",
     "CleanCycle",
     "ConnectionStatus",
+    "DeviceType",
     "Diagnostics",
     "EnergySaving",
     "EnergySavingMode",
@@ -55,7 +59,9 @@ __all__ = [
     "HotSpringConnectionError",
     "HotSpringConnectionTimeoutError",
     "HotSpringError",
+    "HotSpringInvalidDeviceError",
     "HotSpringNotReadyError",
+    "HotSpringSNADetectedError",
     "Jet",
     "JetSpeed",
     "JetSpeedType",

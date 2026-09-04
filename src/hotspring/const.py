@@ -477,3 +477,36 @@ def resolve_spa_model(
     model_name = SPA_MODEL_MAP.get((brand_id, collection_id, model_id), "Unknown")
 
     return (brand, collection, model_name)
+
+
+class DeviceType(Enum):
+    """Connected Spa kit adapter device type.
+
+    The Connected Spa Kit 2 consists of two modules:
+    - HNA (Home Network Adapter): Connected to home network, acts as API bridge.
+    - SNA (Spa Network Adapter): Located in the tub, physically wired to controller.
+    """
+
+    UNKNOWN = "unknown"
+    HNA = "hna"
+    SNA = "sna"
+
+    @classmethod
+    def build(cls, value: str | None) -> DeviceType:
+        """Parse a raw string into a DeviceType.
+
+        Args:
+        ----
+            value: The raw device type string, or None.
+
+        Returns:
+        -------
+            The matching DeviceType, or DeviceType.UNKNOWN for unrecognized values.
+
+        """
+        if value is None:
+            return cls.UNKNOWN
+        return _DEVICE_TYPE_MAP.get(value.lower(), cls.UNKNOWN)
+
+
+_DEVICE_TYPE_MAP: dict[str, DeviceType] = {d.value: d for d in DeviceType}
