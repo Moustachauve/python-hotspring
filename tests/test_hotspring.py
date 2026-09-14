@@ -6,6 +6,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import aiohttp
 import pytest
@@ -1293,6 +1294,29 @@ class TestConnection:
             )
             with pytest.raises(HotSpringConnectionError):
                 await client.update()
+
+    async def test_client_error_with_retries(self) -> None:
+        """Test ClientError triggers retries when request_retries is configured."""
+        call_count = 0
+
+        async with aiohttp.ClientSession() as session:
+
+            def side_effect(*_args: object, **_kwargs: object) -> None:
+                nonlocal call_count
+                call_count += 1
+                msg = "Connection reset"
+                raise aiohttp.ClientConnectionError(msg)
+
+            with patch.object(session, "request", side_effect=side_effect):
+                client = HotSpring(
+                    host="192.168.1.100",
+                    session=session,
+                    request_retries=1,
+                )
+                with pytest.raises(HotSpringConnectionError):
+                    await client.update()
+
+            assert call_count == 2
 
     async def test_fallback_spa_connected_when_status_succeeds(
         self, aresponses: ResponsesMockServer
