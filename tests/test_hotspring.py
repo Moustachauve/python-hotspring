@@ -1250,24 +1250,81 @@ class TestCommands:  # pylint: disable=too-many-public-methods
 class TestConnection:
     """Tests for connection handling."""
 
-    async def test_connection_error(self, aresponses: ResponsesMockServer) -> None:
-        """Test connection error is raised properly."""
+    async def test_connection_error_no_retries(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that with default request_retries=0, failure is immediate."""
 
         async def handler(_: aiohttp.ClientResponse) -> Response:
             await asyncio.sleep(0.2)
             return Response(text="timeout")
 
-        # Backoff retries 3 times
-        aresponses.add("192.168.1.100", "/status", "GET", handler)
-        aresponses.add("192.168.1.100", "/status", "GET", handler)
+        # Fails on the very first attempt without retrying
         aresponses.add("192.168.1.100", "/status", "GET", handler)
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
                 host="192.168.1.100", session=session, request_timeout=0.1
             )
+            assert client.request_retries == 0
             with pytest.raises(HotSpringConnectionError):
                 await client.update()
+
+    async def test_connection_error_with_retries(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test connection error retries when request_retries is configured."""
+
+        async def handler(_: aiohttp.ClientResponse) -> Response:
+            await asyncio.sleep(0.2)
+            return Response(text="timeout")
+
+        # Backoff retries request_retries + 1 = 3 times
+        aresponses.add("192.168.1.100", "/status", "GET", handler)
+        aresponses.add("192.168.1.100", "/status", "GET", handler)
+        aresponses.add("192.168.1.100", "/status", "GET", handler)
+
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(
+                host="192.168.1.100",
+                session=session,
+                request_timeout=0.1,
+                request_retries=2,
+            )
+            with pytest.raises(HotSpringConnectionError):
+                await client.update()
+
+    async def test_fallback_spa_connected_when_status_succeeds(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test fallback spa_connected=True when /status succeeds."""
+        host = "192.168.1.100"
+        aresponses.add(host, "/status", "GET", _json_response("status.json"))
+        aresponses.add(host, "/startup", "GET", _json_response("startup.json"))
+        # /spaConnectStatus returns 500 error (transient failure)
+        aresponses.add(
+            host,
+            "/spaConnectStatus",
+            "GET",
+            Response(status=500, text="Internal Server Error"),
+        )
+        aresponses.add(host, "/spamodel", "GET", _json_response("spamodel.json"))
+
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host=host, session=session)
+            spa = await client.update()
+            assert spa.connection_status.spa_connected is True
+
+            # And on routine update when /spaConnectStatus fails
+            aresponses.add(host, "/status", "GET", _json_response("status.json"))
+            aresponses.add(
+                host,
+                "/spaConnectStatus",
+                "GET",
+                Response(status=500, text="Internal Server Error"),
+            )
+            spa = await client.update()
+            assert spa.connection_status.spa_connected is True
 
     async def test_context_manager(self) -> None:
         """Test async context manager."""

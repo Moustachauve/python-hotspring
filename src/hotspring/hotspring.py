@@ -58,48 +58,19 @@ class HotSpring:  # pylint: disable=too-many-public-methods
     host: str
     session: aiohttp.ClientSession | None = None
     request_timeout: float = 10.0
+    request_retries: int = 0
     validate_device: bool = True
     _close_session: bool = False
     _identity_loaded: bool = False
     spa: Spa | None = None
 
-    @backoff.on_exception(
-        backoff.expo,
-        HotSpringConnectionError,
-        max_tries=3,
-        logger=None,
-    )
-    async def request(
+    async def _request_raw(
         self,
         uri: str = "",
         method: str = "GET",
         data: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        """Handle a request to the Hot Spring HNA.
-
-        A generic method for sending/handling HTTP requests done against
-        the Hot Spring Home Network Adapter.
-
-        Args:
-        ----
-            uri: Request URI, for example ``/status``.
-            method: HTTP method to use for the request.
-            data: Dictionary of data to send to the HNA.
-
-        Returns:
-        -------
-            A Python dictionary (JSON decoded) with the response from the
-            Hot Spring HNA.
-
-        Raises:
-        ------
-            HotSpringConnectionError: An error occurred while communicating
-                with the Hot Spring HNA.
-            HotSpringConnectionTimeoutError: A timeout occurred while
-                communicating with the Hot Spring HNA.
-            HotSpringError: Received an unexpected response from the HNA.
-
-        """
+        """Execute a single HTTP request to the Hot Spring HNA."""
         url = URL.build(scheme="http", host=self.host, port=80, path=uri)
 
         headers = {
@@ -158,6 +129,52 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
         return response_data
 
+    async def request(
+        self,
+        uri: str = "",
+        method: str = "GET",
+        data: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        """Handle a request to the Hot Spring HNA.
+
+        A generic method for sending/handling HTTP requests done against
+        the Hot Spring Home Network Adapter. If `request_retries > 0`, failed
+        connection attempts are retried using exponential backoff.
+
+        Args:
+        ----
+            uri: Request URI, for example ``/status``.
+            method: HTTP method to use for the request.
+            data: Dictionary of data to send to the HNA.
+
+        Returns:
+        -------
+            A Python dictionary (JSON decoded) with the response from the
+            Hot Spring HNA.
+
+        Raises:
+        ------
+            HotSpringConnectionError: An error occurred while communicating
+                with the Hot Spring HNA.
+            HotSpringConnectionTimeoutError: A timeout occurred while
+                communicating with the Hot Spring HNA.
+            HotSpringError: Received an unexpected response from the HNA.
+
+        """
+        if self.request_retries <= 0:
+            return await self._request_raw(uri, method, data)
+
+        @backoff.on_exception(
+            backoff.expo,
+            HotSpringConnectionError,
+            max_tries=self.request_retries + 1,
+            logger=None,
+        )
+        async def _retryable_request() -> dict[str, object]:
+            return await self._request_raw(uri, method, data)
+
+        return await _retryable_request()
+
     async def _safe_request(self, uri: str) -> dict[str, object] | None:
         """Fetch an endpoint, returning None on error."""
         with contextlib.suppress(HotSpringError):
@@ -168,11 +185,12 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         """Get all spa information.
 
         On the initial call (or when `refresh_identity=True`), this method fetches
-        the main /status endpoint concurrently with /startup, /spaConnectStatus,
-        and /spamodel.
+        the main /status endpoint sequentially followed by /startup, /spaConnectStatus,
+        and /spamodel. Sequential execution prevents socket exhaustion and LoRA radio
+        congestion on the ESP32.
 
         On subsequent routine polling cycles, it queries /status and /spaConnectStatus
-        concurrently, avoiding redundant radio (LoRA) queries for static identity data
+        sequentially, avoiding redundant radio (LoRA) queries for static identity data
         while keeping telemetry and connection status fresh.
 
         Args:
@@ -192,12 +210,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
         """
         if not self._identity_loaded or refresh_identity:
-            status_res, startup_res, connect_res, model_res = await asyncio.gather(
-                self.request("/status"),
-                self._safe_request("/startup"),
-                self._safe_request("/spaConnectStatus"),
-                self._safe_request("/spamodel"),
-            )
+            status_res = await self.request("/status")
+            startup_res = await self._safe_request("/startup")
+            connect_res = await self._safe_request("/spaConnectStatus")
+            model_res = await self._safe_request("/spamodel")
 
             if self.spa is None:
                 self.spa = Spa(status_res)
@@ -212,6 +228,11 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
             if connect_res:
                 self.spa.update_connection_status(connect_res)
+            elif (
+                self.spa.connection_status
+                and not self.spa.connection_status.spa_connected
+            ):
+                self.spa.connection_status.spa_connected = True
 
             if self.validate_device and self.spa.info.is_sna:
                 msg = (
@@ -225,10 +246,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             self._identity_loaded = True
             return self.spa
 
-        status_res, connect_res = await asyncio.gather(
-            self.request("/status"),
-            self._safe_request("/spaConnectStatus"),
-        )
+        status_res = await self.request("/status")
+        connect_res = await self._safe_request("/spaConnectStatus")
 
         if self.spa is None:  # Safety guard; spa is always set after cold sync
             self.spa = Spa(status_res)
@@ -237,6 +256,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
         if connect_res:
             self.spa.update_connection_status(connect_res)
+        elif (
+            self.spa.connection_status and not self.spa.connection_status.spa_connected
+        ):
+            self.spa.connection_status.spa_connected = True
 
         return self.spa
 
@@ -278,10 +301,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = "Call update() before update_identity()"
             raise HotSpringError(msg)
 
-        startup_res, model_res = await asyncio.gather(
-            self._safe_request("/startup"),
-            self._safe_request("/spamodel"),
-        )
+        startup_res = await self._safe_request("/startup")
+        model_res = await self._safe_request("/spamodel")
 
         identity_data: dict[str, object] = {}
         if startup_res:
