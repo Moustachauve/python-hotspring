@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Self
 
 import aiohttp
-import backoff
 from yarl import URL
 
 from .const import (
@@ -64,71 +63,6 @@ class HotSpring:  # pylint: disable=too-many-public-methods
     _identity_loaded: bool = False
     spa: Spa | None = None
 
-    async def _request_raw(
-        self,
-        uri: str = "",
-        method: str = "GET",
-        data: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        """Execute a single HTTP request to the Hot Spring HNA."""
-        url = URL.build(scheme="http", host=self.host, port=80, path=uri)
-
-        headers = {
-            "Accept": "application/json, text/plain, */*",
-        }
-
-        if self.session is None:
-            self.session = aiohttp.ClientSession()
-            self._close_session = True
-
-        try:
-            async with asyncio.timeout(self.request_timeout):
-                response = await self.session.request(
-                    method,
-                    url,
-                    json=data,
-                    headers=headers,
-                )
-
-            if response.status // 100 in [4, 5]:
-                contents = await response.read()
-                response.close()
-
-                try:
-                    raise HotSpringError(
-                        response.status,
-                        json.loads(contents.decode("utf8")),
-                    )
-                except json.JSONDecodeError:
-                    raise HotSpringError(
-                        response.status,
-                        {"message": contents.decode("utf8")},
-                    ) from None
-
-            # The spa returns JSON with text/html Content-Type,
-            # so always try JSON parsing first.
-            body = await response.text()
-            try:
-                response_data = json.loads(body)
-            except json.JSONDecodeError as exc:
-                msg = f"Invalid JSON response from {uri}: {body[:200]}"
-                raise HotSpringError(msg) from exc
-
-        except asyncio.TimeoutError as exception:
-            msg = f"Timeout occurred while connecting to Hot Spring HNA at {self.host}"
-            raise HotSpringConnectionTimeoutError(msg) from exception
-        except aiohttp.ClientError as exception:
-            msg = (
-                f"Error occurred while communicating with Hot Spring HNA at {self.host}"
-            )
-            raise HotSpringConnectionError(msg) from exception
-
-        if not isinstance(response_data, dict):
-            msg = f"Unexpected response type from {uri}"
-            raise HotSpringError(msg)
-
-        return response_data
-
     async def request(
         self,
         uri: str = "",
@@ -161,19 +95,75 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             HotSpringError: Received an unexpected response from the HNA.
 
         """
-        if self.request_retries <= 0:
-            return await self._request_raw(uri, method, data)
+        url = URL.build(scheme="http", host=self.host, port=80, path=uri)
 
-        @backoff.on_exception(
-            backoff.expo,
-            HotSpringConnectionError,
-            max_tries=self.request_retries + 1,
-            logger=None,
-        )
-        async def _retryable_request() -> dict[str, object]:
-            return await self._request_raw(uri, method, data)
+        headers = {
+            "Accept": "application/json, text/plain, */*",
+        }
 
-        return await _retryable_request()
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+            self._close_session = True
+
+        attempts = 0
+        while True:
+            try:
+                async with asyncio.timeout(self.request_timeout):
+                    response = await self.session.request(
+                        method,
+                        url,
+                        json=data,
+                        headers=headers,
+                    )
+
+                if response.status // 100 in [4, 5]:
+                    contents = await response.read()
+                    response.close()
+
+                    try:
+                        raise HotSpringError(
+                            response.status,
+                            json.loads(contents.decode("utf8")),
+                        )
+                    except json.JSONDecodeError:
+                        raise HotSpringError(
+                            response.status,
+                            {"message": contents.decode("utf8")},
+                        ) from None
+
+                # The spa returns JSON with text/html Content-Type,
+                # so always try JSON parsing first.
+                body = await response.text()
+                try:
+                    response_data = json.loads(body)
+                except json.JSONDecodeError as exc:
+                    msg = f"Invalid JSON response from {uri}: {body[:200]}"
+                    raise HotSpringError(msg) from exc
+
+                if not isinstance(response_data, dict):
+                    msg = f"Unexpected response type from {uri}"
+                    raise HotSpringError(msg)
+
+            except asyncio.TimeoutError as exception:  # noqa: PERF203
+                attempts += 1
+                if attempts > self.request_retries:
+                    msg = (
+                        f"Timeout occurred while connecting to Hot Spring HNA at "
+                        f"{self.host}"
+                    )
+                    raise HotSpringConnectionTimeoutError(msg) from exception
+                await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
+            except aiohttp.ClientError as exception:
+                attempts += 1
+                if attempts > self.request_retries:
+                    msg = (
+                        f"Error occurred while communicating with Hot Spring HNA at "
+                        f"{self.host}"
+                    )
+                    raise HotSpringConnectionError(msg) from exception
+                await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
+            else:
+                return response_data
 
     async def _safe_request(self, uri: str) -> dict[str, object] | None:
         """Fetch an endpoint, returning None on error."""
