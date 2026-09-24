@@ -432,12 +432,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
         """
         temp_float = round(float(temperature), 1)
-        temp_str = (
-            str(int(temp_float)) if temp_float.is_integer() else str(temp_float)
-        )
-        await self._send_command(
-            {"heater": {"control": {"temperatureABS": temp_str}}}
-        )
+        temp_str = str(int(temp_float)) if temp_float.is_integer() else str(temp_float)
+        await self._send_command({"heater": {"control": {"temperatureABS": temp_str}}})
 
     async def set_heating_mode(self, mode: str | HeatingMode) -> None:
         """Set the heating mode.

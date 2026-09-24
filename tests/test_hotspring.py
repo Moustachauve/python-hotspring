@@ -528,9 +528,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             await client.update()
             await client.set_temperature(102)
 
-    async def test_set_temperature_float(
-        self, aresponses: ResponsesMockServer
-    ) -> None:
+    async def test_set_temperature_float(self, aresponses: ResponsesMockServer) -> None:
         """Test setting temperature with half-degree float and whole float."""
         _add_update_mocks(aresponses)
 
