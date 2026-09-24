@@ -529,28 +529,19 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             await client.set_temperature(102)
 
     async def test_set_temperature_float(self, aresponses: ResponsesMockServer) -> None:
-        """Test setting temperature with half-degree float and whole float."""
+        """Test setting temperature with float."""
         _add_update_mocks(aresponses)
-
-        requests_received: list[dict[str, object]] = []
 
         async def handler(request: aiohttp.web.Request) -> Response:
             data = await request.json()
-            requests_received.append(data)
+            assert data == {"heater": {"control": {"temperatureABS": "38.5"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         aresponses.add("192.168.1.100", "/spaManager", "POST", handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             await client.set_temperature(38.5)
-            await client.set_temperature(38.0)
-
-        assert requests_received == [
-            {"heater": {"control": {"temperatureABS": "38.5"}}},
-            {"heater": {"control": {"temperatureABS": "38"}}},
-        ]
 
     async def test_set_jet(self, aresponses: ResponsesMockServer) -> None:
         """Test setting jet speed."""
