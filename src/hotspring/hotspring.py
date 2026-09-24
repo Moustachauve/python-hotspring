@@ -422,17 +422,21 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = f"Command failed: {payload}"
             raise HotSpringCommandError(msg) from exception
 
-    async def set_temperature(self, temperature: int) -> None:
+    async def set_temperature(self, temperature: float) -> None:
         """Set the target water temperature.
 
         Args:
         ----
             temperature: Target temperature in the spa's configured unit
-                (Fahrenheit or Celsius).
+                (Fahrenheit or Celsius). Supports integer or half-degree float values.
 
         """
+        temp_float = round(float(temperature), 1)
+        temp_str = (
+            str(int(temp_float)) if temp_float.is_integer() else str(temp_float)
+        )
         await self._send_command(
-            {"heater": {"control": {"temperatureABS": str(temperature)}}}
+            {"heater": {"control": {"temperatureABS": temp_str}}}
         )
 
     async def set_heating_mode(self, mode: str | HeatingMode) -> None:
