@@ -1298,6 +1298,19 @@ class TestControlResponseParsing:
         assert updated.heater_lock is True
         assert updated.temperature_unit == TemperatureUnit.FAHRENHEIT
 
+    def test_heater_control_temperature_float(self) -> None:
+        """Test parsing half-degree float temperature from control dict."""
+        existing = Heater(
+            set_temperature=38.0,
+            temperature_unit=TemperatureUnit.CELSIUS,
+        )
+        updated = Heater.from_dict(
+            {"control": {"temperatureABS": "38.5"}},
+            existing=existing,
+        )
+        assert updated.set_temperature == 38.5
+        assert updated.temperature_unit == TemperatureUnit.CELSIUS
+
     def test_heater_invalid_mode_accepted(self) -> None:
         """Test that 'invalid' mode in response is accepted as a valid state."""
         existing = Heater(heating_mode=HeatingMode.AUTO_WITH_BOOST)
