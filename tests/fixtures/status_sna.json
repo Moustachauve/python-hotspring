@@ -1,0 +1,204 @@
+{
+  "JET": {
+    "JET1": {
+      "config": {
+        "speed": "singleSpeed"
+      },
+      "status": {
+        "speed": "off",
+        "jet_1_ON_sec": 0
+      }
+    },
+    "JET2": {
+      "config": {
+        "JET2": "disable",
+        "speed": "singleSpeed"
+      },
+      "status": {
+        "speed": "off",
+        "jet_2_ON_sec": 0
+      }
+    },
+    "JET3": {
+      "config": {
+        "JET3": "disable",
+        "concurrent": "disable"
+      },
+      "status": {
+        "speed": "off",
+        "jet_3_ON_sec": 0,
+        "current": 0
+      }
+    }
+  },
+  "heater": {
+    "config": {
+      "temperatureUnit": "DegF",
+      "heatPumptranquil": "disable",
+      "heaterConcurrent": "disable",
+      "heatPumpConcurrent": "disable"
+    },
+    "status": {
+      "heater": "off",
+      "heaterLock": "off",
+      "heatpumpInstalled": "notinstalled",
+      "heatingMode": "heatWithBoost",
+      "heaterCurrent": 0,
+      "heaterHours": 0,
+      "setWaterTemperature": "",
+      "currentWaterTemperature": "",
+      "temperatureUnit": "DegF"
+    }
+  },
+  "cleanCycle": {
+    "status": {
+      "cleanCycle": "enable",
+      "vanishingAct": "off"
+    },
+    "config": {
+      "twentyFourHourTimer": "disable"
+    }
+  },
+  "spaLock": {
+    "config": {
+      "spaLock_config": "disable"
+    },
+    "status": {
+      "spaLock": "off"
+    }
+  },
+  "blower": {
+    "config": {
+      "blower": "disable",
+      "blowerConcurrent": "disable"
+    },
+    "status": {
+      "blower": "disable"
+    }
+  },
+  "lights": {
+    "zone1": {
+      "config": {
+        "zone_1": "disable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 0,
+        "color": "WHEEL_OFF"
+      }
+    },
+    "zone2": {
+      "config": {
+        "zone_2": "disable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 0,
+        "color": "WHEEL_OFF"
+      }
+    },
+    "zone3": {
+      "config": {
+        "zone_3": "disable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 0,
+        "color": "WHEEL_OFF"
+      }
+    },
+    "zone4": {
+      "config": {
+        "zone_4": "disable"
+      },
+      "status": {
+        "lightWheel": "off",
+        "loopSpeed": 0,
+        "Intensity": 0,
+        "color": "WHEEL_OFF"
+      }
+    },
+    "config": {
+      "emz": "disable",
+      "exteriorLights": "disable",
+      "lights24HourTimer": "disable"
+    }
+  },
+  "logoLight": {
+    "config": {
+      "logoHighBrightness": "disable",
+      "logoLowBrightness": "disable"
+    },
+    "status": {
+      "brightness": "brightness_level_1"
+    }
+  },
+  "waterCare": {
+    "status": {
+      "cartridgeInstalled": "notinstalled",
+      "10DayTimer": 0,
+      "120DayTimer": 0,
+      "level": 0,
+      "SystemEnable": "disable",
+      "AceMode": "inactive",
+      "boost": "inactive",
+      "SaltTest": "inactive",
+      "saltLevel": "OK_SALT",
+      "saltValue": 0,
+      "cartLife": ""
+    },
+    "config": {
+      "saltSystemPowerA": "disable",
+      "saltSystemPowerB": "disable"
+    }
+  },
+  "productVersions": {
+    "status": {
+      "ControlBoxFirmwareVersion": "",
+      "FWSSFirmwareVersion": "",
+      "FWIQFirmwareVersion": "",
+      "BTXRFirmwareVersion": "",
+      "CoolZoneFirmwareVersion": "",
+      "WiFiDongleVersion": "ND26.1205E0"
+    }
+  },
+  "test_data": {
+    "status": {
+      "heaterTestStatus": "off",
+      "tempOffset": 0.0,
+      "VsenseCal": 0.0,
+      "jet1+jet2+blowerCurrent": 0,
+      "smallLoadsCurrent": 0,
+      "heaterCurrent": 0,
+      "jet3Current": 0
+    }
+  },
+  "FWIQ_Parameters": {
+    "current_Current_CompConductivity": 0,
+    "current_ORP": 0,
+    "current_chlorine": 0.0,
+    "current_pH": 0.0,
+    "current_SensorLife_Percentage": 0.0
+  },
+  "energySavings": {
+    "energySaving1": {
+      "status": {
+        "mode": 0,
+        "startHour": 0,
+        "startMinute": 0,
+        "duration": 0
+      }
+    },
+    "energySaving2": {
+      "status": {
+        "mode": 0,
+        "startHour": 0,
+        "startMinute": 0,
+        "duration": 0
+      }
+    }
+  }
+}
