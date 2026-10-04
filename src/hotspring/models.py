@@ -216,22 +216,14 @@ class Spa:
     @property
     def is_hna(self) -> bool:
         """Return True if this device is the Home Network Adapter (HNA)."""
-        if self.info.is_sna:
-            return False
-
-        if self.info.sna_ready:
-            return True
-
-        return (
-            self.heater.current_temperature is not None
-            or self.heater.set_temperature is not None
-            or bool(getattr(self.versions, "control_box", ""))
-        )
+        return self.info.sna_ready or bool(getattr(self.versions, "control_box", ""))
 
     @property
-    def is_sna(self) -> bool:
-        """Return True if this device is the Spa Network Adapter (SNA)."""
-        return not self.is_hna
+    def device_type(self) -> DeviceType:
+        """Determine whether the device is an HNA or SNA."""
+        if not self.info.hostname:
+            return DeviceType.UNKNOWN
+        return DeviceType.HNA if self.is_hna else DeviceType.SNA
 
 
 @dataclass
@@ -334,42 +326,24 @@ class SpaInfo:
     def device_type(self) -> DeviceType:
         """Determine whether the device is an HNA or SNA.
 
-        The HNA (Home Network Adapter) is the intended API bridge.
-        The SNA (Spa Network Adapter) is the tub-side module.
-
-        On the HNA with an active link to the SNA, 'SNAready' is 'Yes' (True).
-        The SNA firmware always reports 'SNAready' as 'No' (False).
-
-        When 'root_topic' does not match the hostname MAC suffix and 'sna_ready'
-        is False, this indicates an SNA on setups where HNA MAC > SNA MAC.
+        Only the HNA can report 'SNAready' as 'Yes'; the SNA firmware always
+        reports 'No'. The hostname/rootTopic MAC suffixes cannot be used,
+        since rootTopic is built from the higher of the two adapter MACs.
 
         Returns
         -------
-            DeviceType.HNA if sna_ready is True or hostname matches root_topic,
-            DeviceType.SNA if hostname differs from root_topic and sna_ready is False,
-            DeviceType.UNKNOWN if information is missing.
+            DeviceType.UNKNOWN if /startup data is missing,
+            DeviceType.HNA if sna_ready is True, otherwise DeviceType.SNA.
 
         """
-        if not self.hostname or not self.root_topic:
+        if not self.hostname:
             return DeviceType.UNKNOWN
-
-        if self.sna_ready:
-            return DeviceType.HNA
-
-        mac_suffix = self.hostname.rsplit("_", 1)[-1]
-        if self.root_topic.lower().endswith(mac_suffix.lower()):
-            return DeviceType.HNA
-        return DeviceType.SNA
+        return DeviceType.HNA if self.sna_ready else DeviceType.SNA
 
     @property
     def is_hna(self) -> bool:
         """Return True if this device is the Home Network Adapter (HNA)."""
-        return self.device_type == DeviceType.HNA
-
-    @property
-    def is_sna(self) -> bool:
-        """Return True if this device is the Spa Network Adapter (SNA)."""
-        return self.device_type == DeviceType.SNA
+        return self.sna_ready
 
 
 @dataclass

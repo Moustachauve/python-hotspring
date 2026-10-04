@@ -224,7 +224,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             ):
                 self.spa.connection_status.spa_connected = True
 
-            if self.validate_device and self.spa.is_sna:
+            if self.validate_device and not self.spa.is_hna:
                 msg = (
                     f"Connected to Spa Network Adapter (SNA) with hostname "
                     f"'{self.spa.info.hostname}'. The Home Network Adapter (HNA) "
@@ -303,7 +303,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         if identity_data:
             self.spa.update_info(identity_data)
 
-        if self.validate_device and self.spa.is_sna:
+        if self.validate_device and not self.spa.is_hna:
             msg = (
                 f"Connected to Spa Network Adapter (SNA) with hostname "
                 f"'{self.spa.info.hostname}'. The Home Network Adapter (HNA) "

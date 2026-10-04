@@ -15,6 +15,7 @@
     connection_status=ConnectionStatus(
       spa_connected=True,
     ),
+    device_type=<DeviceType.HNA: 'hna'>,
     diagnostics=Diagnostics(
       circulation_pump_flow_status='0',
       heater_error='0',
@@ -81,7 +82,6 @@
       volume=335,
     ),
     is_hna=True,
-    is_sna=False,
     jets=dict({
       1: Jet(
         concurrent_mode=False,

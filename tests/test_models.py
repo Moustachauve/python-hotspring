@@ -812,54 +812,60 @@ class TestSpaInfo:
         info = SpaInfo.from_dict({"SNAready": "Unknown"})
         assert info.sna_ready is False
 
-    def test_device_type_hna(self) -> None:
-        """Test HNA device type detection when hostname matches root_topic."""
-        info = SpaInfo.from_dict(
-            {
-                "HOSTNAME": "ConnectedSpa_112233",
-                "rootTopic": "mySpaAABBCC112233",
-            }
-        )
-        assert info.device_type == DeviceType.HNA
-        assert info.is_hna is True
-        assert info.is_sna is False
-
-    def test_device_type_sna(self) -> None:
-        """Test SNA device type detection when hostname differs from root_topic."""
-        info = SpaInfo.from_dict(
-            {
-                "HOSTNAME": "ConnectedSpa_445566",
-                "rootTopic": "mySpaAABBCC112233",
-            }
-        )
-        assert info.device_type == DeviceType.SNA
-        assert info.is_hna is False
-        assert info.is_sna is True
-
     @pytest.mark.parametrize(
-        ("hostname", "root_topic", "expected_type"),
+        ("startup", "expected_type"),
         [
-            ("ConnectedSpa_112233", "mySpaAABBCC112233", DeviceType.HNA),
-            ("ConnectedSpa_112233", "myspaaabbcc112233", DeviceType.HNA),
-            ("connectedspa_112233", "mySpaAABBCC112233", DeviceType.HNA),
-            ("ConnectedSpa_445566", "mySpaAABBCC112233", DeviceType.SNA),
-            ("ConnectedSpa_FFFFFF", "mySpa001122334455", DeviceType.SNA),
-            ("", "mySpaAABBCC112233", DeviceType.UNKNOWN),
-            ("ConnectedSpa_112233", "", DeviceType.UNKNOWN),
-            ("", "", DeviceType.UNKNOWN),
+            pytest.param(
+                {
+                    "HOSTNAME": "ConnectedSpa_112233",
+                    "rootTopic": "mySpaAABBCC112233",
+                    "SNAready": "Yes",
+                },
+                DeviceType.HNA,
+                id="hna_mac_matches_root_topic",
+            ),
+            pytest.param(
+                {
+                    "HOSTNAME": "ConnectedSpa_350D20",
+                    "rootTopic": "mySpa001122F24BC4",
+                    "SNAready": "Yes",
+                },
+                DeviceType.HNA,
+                id="hna_sna_mac_higher",
+            ),
+            pytest.param(
+                {
+                    "HOSTNAME": "ConnectedSpa_445566",
+                    "rootTopic": "mySpaAABBCC112233",
+                    "SNAready": "No",
+                },
+                DeviceType.SNA,
+                id="sna_mac_differs_from_root_topic",
+            ),
+            pytest.param(
+                {
+                    "HOSTNAME": "ConnectedSpa_F24BC4",
+                    "rootTopic": "mySpa001122F24BC4",
+                    "SNAready": "No",
+                },
+                DeviceType.SNA,
+                id="sna_mac_matches_root_topic",
+            ),
+            pytest.param(
+                {"rootTopic": "mySpaAABBCC112233", "SNAready": "No"},
+                DeviceType.UNKNOWN,
+                id="missing_hostname",
+            ),
+            pytest.param({}, DeviceType.UNKNOWN, id="empty"),
         ],
     )
-    def test_device_type_variants(
-        self,
-        hostname: str,
-        root_topic: str,
-        expected_type: DeviceType,
+    def test_device_type(
+        self, startup: dict[str, object], expected_type: DeviceType
     ) -> None:
-        """Test device type detection across various valid and edge cases."""
-        info = SpaInfo.from_dict({"HOSTNAME": hostname, "rootTopic": root_topic})
-        assert info.device_type == expected_type
-        assert info.is_hna is (expected_type == DeviceType.HNA)
-        assert info.is_sna is (expected_type == DeviceType.SNA)
+        """Test HNA/SNA detection relies on SNAready, not MAC suffixes."""
+        info = SpaInfo.from_dict(startup)
+        assert info.device_type is expected_type
+        assert info.is_hna is (expected_type is DeviceType.HNA)
 
     def test_device_type_enum_build(self) -> None:
         """Test DeviceType.build parses strings correctly."""
@@ -869,24 +875,6 @@ class TestSpaInfo:
         assert DeviceType.build("SNA") == DeviceType.SNA
         assert DeviceType.build(None) == DeviceType.UNKNOWN
         assert DeviceType.build("invalid") == DeviceType.UNKNOWN
-
-    def test_device_type_hna_when_sna_mac_higher(self) -> None:
-        """Test HNA detection when SNA MAC is higher than HNA MAC.
-
-        When SNA MAC > HNA MAC, rootTopic reflects the SNA MAC address, so
-        the HNA's hostname suffix does NOT match root_topic. However, because
-        'SNAready' is 'Yes', it must be identified as an HNA.
-        """
-        info = SpaInfo.from_dict(
-            {
-                "HOSTNAME": "ConnectedSpa_350D20",
-                "rootTopic": "mySpa001122F24BC4",
-                "SNAready": "Yes",
-            }
-        )
-        assert info.device_type == DeviceType.HNA
-        assert info.is_hna is True
-        assert info.is_sna is False
 
 
 class TestSpa:  # pylint: disable=too-many-public-methods
@@ -899,61 +887,61 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         spa = Spa(status_response)
         assert spa == snapshot
 
-    def test_spa_device_detection_sna_mac_higher_hna(
-        self, status_response: dict[str, object]
+    @pytest.mark.parametrize(
+        ("sna_ready", "control_box", "hostname", "expected_type"),
+        [
+            pytest.param(
+                True,
+                "",
+                "ConnectedSpa_112233",
+                DeviceType.HNA,
+                id="sna_ready_true",
+            ),
+            pytest.param(
+                False,
+                "EG25.2100K0",
+                "ConnectedSpa_112233",
+                DeviceType.HNA,
+                id="cached_control_box_link_lost",
+            ),
+            pytest.param(
+                True,
+                "EG25.2100K0",
+                "ConnectedSpa_112233",
+                DeviceType.HNA,
+                id="both_present",
+            ),
+            pytest.param(
+                False,
+                "",
+                "ConnectedSpa_445566",
+                DeviceType.SNA,
+                id="sna_standalone",
+            ),
+            pytest.param(False, "", "", DeviceType.UNKNOWN, id="missing_hostname"),
+        ],
+    )
+    def test_spa_device_detection(
+        self,
+        sna_ready: bool,
+        control_box: str,
+        hostname: str,
+        expected_type: DeviceType,
     ) -> None:
-        """Test Spa correctly identifies HNA when SNA MAC is higher than HNA MAC."""
-        spa = Spa(status_response)
-        spa.update_info(
-            {
-                "HOSTNAME": "ConnectedSpa_350D20",
-                "rootTopic": "mySpa001122F24BC4",
-                "SNAready": "Yes",
-            }
-        )
-        assert spa.is_hna is True
-        assert spa.is_sna is False
-
-    def test_spa_device_detection_sna_mac_higher_sna(self) -> None:
-        """Test Spa correctly identifies SNA when SNA MAC is higher than HNA MAC.
-
-        When connected to an SNA where SNA MAC > HNA MAC, hostname suffix matches
-        root_topic, but SNAready is 'No' and water temperature telemetry is absent.
-        """
-        empty_status: dict[str, object] = {
-            "heater": {
-                "status": {
-                    "currentWaterTemperature": "",
-                    "setWaterTemperature": "",
-                }
-            },
-            "productVersions": {"status": {"ControlBoxFirmwareVersion": ""}},
+        """Test Spa.is_hna and Spa.device_type determination."""
+        status: dict[str, object] = {
+            "productVersions": {"status": {"ControlBoxFirmwareVersion": control_box}},
         }
-        spa = Spa(empty_status)
+        spa = Spa(status)
         spa.update_info(
             {
-                "HOSTNAME": "ConnectedSpa_F24BC4",
-                "rootTopic": "mySpa001122F24BC4",
-                "SNAready": "No",
-            }
-        )
-        assert spa.is_hna is False
-        assert spa.is_sna is True
-
-    def test_spa_device_detection_hna_without_sna_ready(
-        self, status_response: dict[str, object]
-    ) -> None:
-        """Test Spa identifies HNA via live telemetry even if sna_ready is False."""
-        spa = Spa(status_response)
-        spa.update_info(
-            {
-                "HOSTNAME": "ConnectedSpa_112233",
+                "HOSTNAME": hostname,
                 "rootTopic": "mySpaAABBCC112233",
-                "SNAready": "No",
+                "SNAready": "Yes" if sna_ready else "No",
             }
         )
-        assert spa.is_hna is True
-        assert spa.is_sna is False
+        assert spa.device_type is expected_type
+        assert spa.is_hna is (expected_type is DeviceType.HNA)
 
     def test_update_info(self, status_response: dict[str, object]) -> None:
         """Test updating spa info with startup and spamodel data."""
