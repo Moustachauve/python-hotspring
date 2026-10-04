@@ -294,6 +294,8 @@
       sna_ready=False,
       volume=0,
     ),
+    is_hna=True,
+    is_sna=False,
     jets=dict({
       1: Jet(
         concurrent_mode=False,

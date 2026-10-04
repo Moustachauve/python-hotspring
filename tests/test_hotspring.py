@@ -86,7 +86,7 @@ def _add_update_mocks(
     )
 
 
-class TestUpdate:
+class TestUpdate:  # pylint: disable=too-many-public-methods
     """Tests for the update() method."""
 
     async def test_update_success(
@@ -358,6 +358,122 @@ class TestUpdate:
         assert spa.info.is_sna is True
         assert spa.info.is_hna is False
         assert spa.info.device_type == DeviceType.SNA
+        assert spa.is_sna is True
+        assert spa.is_hna is False
+
+    async def test_update_succeeds_on_hna_when_sna_mac_higher(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that update() succeeds on HNA when SNA MAC is higher than HNA MAC."""
+        host = "192.168.1.100"
+        aresponses.add(host, "/status", "GET", _json_response("status.json"))
+        aresponses.add(
+            host,
+            "/startup",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                text=json.dumps(
+                    {
+                        "HOSTNAME": "ConnectedSpa_350D20",
+                        "rootTopic": "mySpa001122F24BC4",
+                        "SNAready": "Yes",
+                        "ErrorMessage": "No_Error",
+                    }
+                ),
+            ),
+        )
+        aresponses.add(
+            host,
+            "/spaConnectStatus",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                text=_load("spa_connect_status.json"),
+            ),
+        )
+        aresponses.add(
+            host,
+            "/spamodel",
+            "GET",
+            _json_response("spamodel.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host=host, session=session)
+            spa = await client.update()
+
+        assert spa.is_hna is True
+        assert spa.is_sna is False
+        assert spa.info.is_hna is True
+        assert spa.info.is_sna is False
+        assert spa.info.device_type == DeviceType.HNA
+
+    async def test_update_raises_on_sna_when_sna_mac_higher(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test that update() raises on SNA when SNA MAC is higher than HNA MAC."""
+        host = "192.168.1.100"
+        empty_status = {
+            "heater": {
+                "status": {
+                    "currentWaterTemperature": "",
+                    "setWaterTemperature": "",
+                }
+            },
+            "productVersions": {"status": {"ControlBoxFirmwareVersion": ""}},
+        }
+        aresponses.add(
+            host,
+            "/status",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                text=json.dumps(empty_status),
+            ),
+        )
+        aresponses.add(
+            host,
+            "/startup",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                text=json.dumps(
+                    {
+                        "HOSTNAME": "ConnectedSpa_F24BC4",
+                        "rootTopic": "mySpa001122F24BC4",
+                        "SNAready": "No",
+                        "ErrorMessage": "No_Error",
+                    }
+                ),
+            ),
+        )
+        aresponses.add(
+            host,
+            "/spaConnectStatus",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                text=_load("spa_connect_status.json"),
+            ),
+        )
+        aresponses.add(
+            host,
+            "/spamodel",
+            "GET",
+            _json_response("spamodel.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host=host, session=session)
+            with pytest.raises(
+                HotSpringSNADetectedError,
+                match=r"Connected to Spa Network Adapter \(SNA\)",
+            ):
+                await client.update()
 
     async def test_get_device_info_hna(self, aresponses: ResponsesMockServer) -> None:
         """Test get_device_info() parses HNA startup response directly."""
@@ -372,6 +488,36 @@ class TestUpdate:
             info = await client.get_device_info()
 
         assert info.hostname == "ConnectedSpa_112233"
+        assert info.is_hna is True
+        assert info.is_sna is False
+        assert info.device_type == DeviceType.HNA
+
+    async def test_get_device_info_hna_when_sna_mac_higher(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test get_device_info() parses HNA startup response when SNA MAC is higher."""
+        aresponses.add(
+            "192.168.1.100",
+            "/startup",
+            "GET",
+            Response(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                text=json.dumps(
+                    {
+                        "HOSTNAME": "ConnectedSpa_350D20",
+                        "rootTopic": "mySpa001122F24BC4",
+                        "SNAready": "Yes",
+                        "ErrorMessage": "No_Error",
+                    }
+                ),
+            ),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            info = await client.get_device_info()
+
+        assert info.hostname == "ConnectedSpa_350D20"
         assert info.is_hna is True
         assert info.is_sna is False
         assert info.device_type == DeviceType.HNA

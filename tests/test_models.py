@@ -870,6 +870,24 @@ class TestSpaInfo:
         assert DeviceType.build(None) == DeviceType.UNKNOWN
         assert DeviceType.build("invalid") == DeviceType.UNKNOWN
 
+    def test_device_type_hna_when_sna_mac_higher(self) -> None:
+        """Test HNA detection when SNA MAC is higher than HNA MAC.
+
+        When SNA MAC > HNA MAC, rootTopic reflects the SNA MAC address, so
+        the HNA's hostname suffix does NOT match root_topic. However, because
+        'SNAready' is 'Yes', it must be identified as an HNA.
+        """
+        info = SpaInfo.from_dict(
+            {
+                "HOSTNAME": "ConnectedSpa_350D20",
+                "rootTopic": "mySpa001122F24BC4",
+                "SNAready": "Yes",
+            }
+        )
+        assert info.device_type == DeviceType.HNA
+        assert info.is_hna is True
+        assert info.is_sna is False
+
 
 class TestSpa:  # pylint: disable=too-many-public-methods
     """Tests for the top-level Spa model."""
@@ -880,6 +898,62 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         """Test parsing a complete /status response into a Spa object."""
         spa = Spa(status_response)
         assert spa == snapshot
+
+    def test_spa_device_detection_sna_mac_higher_hna(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test Spa correctly identifies HNA when SNA MAC is higher than HNA MAC."""
+        spa = Spa(status_response)
+        spa.update_info(
+            {
+                "HOSTNAME": "ConnectedSpa_350D20",
+                "rootTopic": "mySpa001122F24BC4",
+                "SNAready": "Yes",
+            }
+        )
+        assert spa.is_hna is True
+        assert spa.is_sna is False
+
+    def test_spa_device_detection_sna_mac_higher_sna(self) -> None:
+        """Test Spa correctly identifies SNA when SNA MAC is higher than HNA MAC.
+
+        When connected to an SNA where SNA MAC > HNA MAC, hostname suffix matches
+        root_topic, but SNAready is 'No' and water temperature telemetry is absent.
+        """
+        empty_status: dict[str, object] = {
+            "heater": {
+                "status": {
+                    "currentWaterTemperature": "",
+                    "setWaterTemperature": "",
+                }
+            },
+            "productVersions": {"status": {"ControlBoxFirmwareVersion": ""}},
+        }
+        spa = Spa(empty_status)
+        spa.update_info(
+            {
+                "HOSTNAME": "ConnectedSpa_F24BC4",
+                "rootTopic": "mySpa001122F24BC4",
+                "SNAready": "No",
+            }
+        )
+        assert spa.is_hna is False
+        assert spa.is_sna is True
+
+    def test_spa_device_detection_hna_without_sna_ready(
+        self, status_response: dict[str, object]
+    ) -> None:
+        """Test Spa identifies HNA via live telemetry even if sna_ready is False."""
+        spa = Spa(status_response)
+        spa.update_info(
+            {
+                "HOSTNAME": "ConnectedSpa_112233",
+                "rootTopic": "mySpaAABBCC112233",
+                "SNAready": "No",
+            }
+        )
+        assert spa.is_hna is True
+        assert spa.is_sna is False
 
     def test_update_info(self, status_response: dict[str, object]) -> None:
         """Test updating spa info with startup and spamodel data."""

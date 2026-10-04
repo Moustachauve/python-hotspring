@@ -213,6 +213,26 @@ class Spa:
         """
         self.freshwater_iq = FreshWaterIQ.from_dict(data)
 
+    @property
+    def is_hna(self) -> bool:
+        """Return True if this device is the Home Network Adapter (HNA)."""
+        if self.info.is_sna:
+            return False
+
+        if self.info.sna_ready:
+            return True
+
+        return (
+            self.heater.current_temperature is not None
+            or self.heater.set_temperature is not None
+            or bool(getattr(self.versions, "control_box", ""))
+        )
+
+    @property
+    def is_sna(self) -> bool:
+        """Return True if this device is the Spa Network Adapter (SNA)."""
+        return not self.is_hna
+
 
 @dataclass
 class SpaInfo:
@@ -317,21 +337,24 @@ class SpaInfo:
         The HNA (Home Network Adapter) is the intended API bridge.
         The SNA (Spa Network Adapter) is the tub-side module.
 
-        On the HNA, the hostname suffix (last 6 characters, e.g. from
-        'ConnectedSpa_112233') matches the last 6 characters of the root_topic
-        (e.g. 'mySpaAABBCC112233').
-        On the SNA, root_topic still points to the paired HNA topic, but
-        the hostname reflects the SNA's own MAC address.
+        On the HNA with an active link to the SNA, 'SNAready' is 'Yes' (True).
+        The SNA firmware always reports 'SNAready' as 'No' (False).
+
+        When 'root_topic' does not match the hostname MAC suffix and 'sna_ready'
+        is False, this indicates an SNA on setups where HNA MAC > SNA MAC.
 
         Returns
         -------
-            DeviceType.HNA if hostname matches root_topic,
-            DeviceType.SNA if hostname differs from root_topic,
+            DeviceType.HNA if sna_ready is True or hostname matches root_topic,
+            DeviceType.SNA if hostname differs from root_topic and sna_ready is False,
             DeviceType.UNKNOWN if information is missing.
 
         """
         if not self.hostname or not self.root_topic:
             return DeviceType.UNKNOWN
+
+        if self.sna_ready:
+            return DeviceType.HNA
 
         mac_suffix = self.hostname.rsplit("_", 1)[-1]
         if self.root_topic.lower().endswith(mac_suffix.lower()):
