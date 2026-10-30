@@ -12,7 +12,6 @@ class HeatingMode(Enum):
     """
 
     UNKNOWN = "unknown"
-    INVALID = "invalid"
     HEAT_SAVER = "heatSaver"
     HEAT_WITH_BOOST = "heatWithBoost"
     CHILL = "chill"

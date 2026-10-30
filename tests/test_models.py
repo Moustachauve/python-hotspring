@@ -52,7 +52,7 @@ class TestEnums:
 
     def test_heating_mode_invalid(self) -> None:
         """Test parsing 'invalid' heating mode from real API."""
-        assert HeatingMode.build("invalid") == HeatingMode.INVALID
+        assert HeatingMode.build("invalid") == HeatingMode.UNKNOWN
 
     def test_heating_mode_unknown(self) -> None:
         """Test parsing an unknown heating mode value."""
@@ -175,6 +175,19 @@ class TestHeater:
         )
         assert heater.set_temperature == 97.0
         assert heater.current_temperature == 38.0
+
+    def test_heatpump_installed_heating_mode(self) -> None:
+        """Test parsing heating mode when heat pump is installed."""
+        heater = Heater.from_dict(
+            {
+                "status": {
+                    "heatpumpInstalled": "installed",
+                    "heatingMode": "heatWithBoost",
+                }
+            }
+        )
+        assert heater.heatpump_installed is True
+        assert heater.heating_mode == HeatingMode.HEAT_WITH_BOOST
 
 
 class TestJet:
@@ -1472,13 +1485,29 @@ class TestControlResponseParsing:
         assert updated.set_temperature == 38.5
         assert updated.temperature_unit == TemperatureUnit.CELSIUS
 
-    def test_heater_invalid_mode_accepted(self) -> None:
-        """Test that 'invalid' mode in response is accepted as a valid state."""
-        existing = Heater(heating_mode=HeatingMode.AUTO_WITH_BOOST)
-        updated = Heater.from_dict(
-            {"status": {"heatingMode": "invalid"}}, existing=existing
+    @pytest.mark.parametrize(
+        "status_payload",
+        [
+            pytest.param({"heatingMode": "invalid"}, id="invalid-sentinel"),
+            pytest.param(
+                {
+                    "heatpumpInstalled": "notinstalled",
+                    "heatingMode": "heatWithBoost",
+                },
+                id="heatpump-notinstalled-pre-sync",
+            ),
+        ],
+    )
+    def test_heater_invalid_or_uninstalled_resets_mode(
+        self, status_payload: dict[str, object]
+    ) -> None:
+        """Test that 'invalid' or uninstalled heat pump resets mode to UNKNOWN."""
+        existing = Heater(
+            heatpump_installed=True,
+            heating_mode=HeatingMode.AUTO_WITH_BOOST,
         )
-        assert updated.heating_mode == HeatingMode.INVALID
+        updated = Heater.from_dict({"status": status_payload}, existing=existing)
+        assert updated.heating_mode == HeatingMode.UNKNOWN
 
     def test_heater_unknown_mode_preserves_existing(self) -> None:
         """Test that 'unknown' or unparsable mode does not overwrite known mode."""
@@ -1651,7 +1680,7 @@ class TestControlResponseParsing:
             }
         )
         assert spa.heater.set_temperature == 100.0
-        assert spa.heater.heating_mode == HeatingMode.INVALID
+        assert spa.heater.heating_mode == HeatingMode.UNKNOWN
 
         # Partial heater control echo
         updated = spa.update_from_dict(
@@ -1659,7 +1688,7 @@ class TestControlResponseParsing:
         )
         assert "heater" in updated
         assert spa.heater.set_temperature == 104.0
-        assert spa.heater.heating_mode == HeatingMode.INVALID
+        assert spa.heater.heating_mode == HeatingMode.UNKNOWN
 
         # Partial jet control echo
         updated_jet = spa.update_from_dict(
