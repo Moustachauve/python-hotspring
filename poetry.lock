@@ -270,21 +270,6 @@ cryptography = "*"
 joserfc = ">=1.6.0"
 
 [[package]]
-name = "awesomeversion"
-version = "25.8.0"
-description = "One version package to rule them all, One version package to find them, One version package to bring them all, and in the darkness bind them."
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "awesomeversion-25.8.0-py3-none-any.whl", hash = "sha256:1c314683abfcc3e26c62af9e609b585bbcbf2ec19568df2f60ff1034fb1dae28"},
-    {file = "awesomeversion-25.8.0.tar.gz", hash = "sha256:e6cd08c90292a11f30b8de401863dcde7bc66a671d8173f9066ebd15d9310453"},
-]
-
-[package.extras]
-dev = ["black (>=25.1)", "isort (>=6.0.1)", "mypy (>=1.16)", "pylint (>=3.3.7)", "pytest (>=8.4.1)", "pytest-codspeed (>=3.2.0)", "pytest-cov (>=6.2.1)", "pytest-snapshot (>=0.9.0)", "pytest-timeout (>=2.4.0)"]
-
-[[package]]
 name = "certifi"
 version = "2026.4.22"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -2147,18 +2132,6 @@ pytest = ">=7"
 testing = ["process-tests", "pytest-xdist", "virtualenv"]
 
 [[package]]
-name = "python-backoff"
-version = "2.3.1"
-description = "Function decoration for backoff and retry"
-optional = false
-python-versions = ">=3.8"
-groups = ["main"]
-files = [
-    {file = "python_backoff-2.3.1-py3-none-any.whl", hash = "sha256:d3cfcc0938ec78683edc530bbeb5f5c08252477a40270516497d2bb500da392b"},
-    {file = "python_backoff-2.3.1.tar.gz", hash = "sha256:54d67283073afa5deb3bb3f8b335952747c5869e7d8f76bf5a87da42bd86c4d6"},
-]
-
-[[package]]
 name = "pyyaml"
 version = "6.0.3"
 description = "YAML parser and emitter for Python"
@@ -2813,4 +2786,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "e9f6defef1abc83f32eb95797c2af320ab87026539ea58e7eb2a61a223ff21fd"
+content-hash = "531142b509fa1e624e3d89a699b0ea237e62432c10795c2a1cbd7c787ae02bfa"
