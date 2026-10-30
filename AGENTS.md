@@ -44,7 +44,7 @@ This repository contains `python-hotspring`, a standalone asynchronous Python cl
 
 ## Good practices
 
-- Built with `asyncio`, `aiohttp`, `yarl`, and `backoff`.
+- Built with `asyncio`, `aiohttp`, and `yarl`.
 - Non-blocking I/O: never perform synchronous disk or network operations on the event loop.
 - Keep `try` clauses as small as possible; avoid catching exceptions from functions not expected to raise them.
 - When a dict key is already checked or guaranteed, avoid redundant `.get(key, default)` fallbacks; use `if (val := data.get("key")) is not None:` or direct `data["key"]` access.
