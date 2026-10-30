@@ -1288,13 +1288,15 @@ def _parse_heater_status(status: dict[str, object]) -> dict[str, object]:
         kwargs["is_on"] = status.get("heater", "off") != "off"
     if "heaterLock" in status:
         kwargs["heater_lock"] = status.get("heaterLock", "off") != "off"
-    if "heatpumpInstalled" in status:
-        kwargs["heatpump_installed"] = (
-            status.get("heatpumpInstalled", "notinstalled") != "notinstalled"
-        )
-    if "heatingMode" in status:
-        mode = HeatingMode.build(status.get("heatingMode"))
-        if mode != HeatingMode.UNKNOWN:
+    if (raw_hp := status.get("heatpumpInstalled")) is not None:
+        kwargs["heatpump_installed"] = raw_hp != "notinstalled"
+    if kwargs.get("heatpump_installed") is False:
+        # At boot before UART sync, the HNA zero-initializes heater_mode to 0
+        # ("heatWithBoost") even when no CoolZone heat pump is installed.
+        kwargs["heating_mode"] = HeatingMode.UNKNOWN
+    elif (raw_mode := status.get("heatingMode")) is not None:
+        mode = HeatingMode.build(raw_mode)
+        if mode != HeatingMode.UNKNOWN or str(raw_mode).strip().lower() == "invalid":
             kwargs["heating_mode"] = mode
     if "heaterCurrent" in status:
         # Motherboard current registers use Q8.8 fixed point in deciapps (0.1 A):
