@@ -51,11 +51,15 @@
     }),
     freshwater_iq=FreshWaterIQ(
       chlorine=3.2,
+      cl_calibration_factor=None,
       conductivity=1500,
       installed=True,
       orp=650,
       ph=7.5,
+      ph_calibration_factor=None,
+      regional_cl_selection='',
       sensor_life_percentage=85.0,
+      system_enabled=False,
     ),
     heater=Heater(
       current_temperature=100.0,
@@ -227,11 +231,15 @@
 # ---
 # name: TestUpdateWaterCare.test_update_water_care
   FreshWaterIQ(
-    chlorine=-1.0,
-    conductivity=-1,
+    chlorine=None,
+    cl_calibration_factor=1.0,
+    conductivity=None,
     installed=False,
-    orp=-1,
-    ph=-1.0,
-    sensor_life_percentage=-1.0,
+    orp=None,
+    ph=None,
+    ph_calibration_factor=0.0,
+    regional_cl_selection='1-5ppm',
+    sensor_life_percentage=None,
+    system_enabled=False,
   )
 # ---
