@@ -138,6 +138,8 @@ class Spa:
                 status if isinstance(status, dict) else {},
                 existing=self.versions,
             )
+            if self._apply_fwiq_firmware_installed():
+                updated.add("freshwater_iq")
             updated.add("versions")
 
         return updated
@@ -211,7 +213,19 @@ class Spa:
             data: The JSON response from GET /getFWIQData.
 
         """
-        self.freshwater_iq = FreshWaterIQ.from_dict(data)
+        self.freshwater_iq = FreshWaterIQ.from_dict(data, existing=self.freshwater_iq)
+        self._apply_fwiq_firmware_installed()
+
+    def _apply_fwiq_firmware_installed(self) -> bool:
+        """Ensure installed=True when FWIQFirmwareVersion is reported.
+
+        A non-empty FWIQFirmwareVersion takes priority over FWIQinstalled from
+        /getFWIQData so pre-sync responses cannot clear hardware presence.
+        """
+        if self.versions.fwiq and not self.freshwater_iq.installed:
+            self.freshwater_iq = replace(self.freshwater_iq, installed=True)
+            return True
+        return False
 
     @property
     def is_hna(self) -> bool:
@@ -847,14 +861,22 @@ class WaterCare:  # pylint: disable=too-many-instance-attributes
 
 @dataclass
 class FreshWaterIQ:
-    """FreshWater IQ water quality sensor data."""
+    """FreshWater IQ water quality sensor data.
 
-    conductivity: int = 0
-    orp: int = 0
-    chlorine: float = 0.0
-    ph: float = 0.0
-    sensor_life_percentage: float = 0.0
+    Sensor reading fields are ``None`` when no valid measurement is available
+    (sensor not installed, ``-1`` firmware sentinel, or pre-sync all-zero state).
+    """
+
+    conductivity: int | None = None
+    orp: int | None = None
+    chlorine: float | None = None
+    ph: float | None = None
+    sensor_life_percentage: float | None = None
     installed: bool = False
+    system_enabled: bool = False
+    cl_calibration_factor: float | None = None
+    ph_calibration_factor: float | None = None
+    regional_cl_selection: str = ""
 
     @staticmethod
     def from_dict(
@@ -876,6 +898,8 @@ class FreshWaterIQ:
             A FreshWaterIQ instance.
 
         """
+        base = existing or FreshWaterIQ()
+
         # Handle the nested /getFWIQData format
         water_care = data.get("waterCare")
         fwiq = None
@@ -887,36 +911,10 @@ class FreshWaterIQ:
                     fwiq = fwiq_status
 
         if fwiq is not None:
-            return FreshWaterIQ(
-                conductivity=int(fwiq.get("Conductivity", 0)),
-                orp=int(fwiq.get("ORP", 0)),
-                chlorine=float(fwiq.get("Chlorine", 0.0)),
-                ph=float(fwiq.get("pH", 0.0)),
-                sensor_life_percentage=float(fwiq.get("SensorLife", 0.0)),
-                installed=fwiq.get("FWIQinstalled", "notinstalled") != "notinstalled",
-            )
+            return replace(base, **_parse_fwiq_status(fwiq))
 
         # Handle the flat /status FWIQ_Parameters format
-        kwargs: dict[str, object] = {}
-        if "current_Current_CompConductivity" in data:
-            kwargs["conductivity"] = int(
-                data.get("current_Current_CompConductivity", 0)
-            )
-        if "current_ORP" in data:
-            kwargs["orp"] = int(data.get("current_ORP", 0))
-        if "current_chlorine" in data:
-            kwargs["chlorine"] = float(data.get("current_chlorine", 0.0))
-        if "current_pH" in data:
-            kwargs["ph"] = float(data.get("current_pH", 0.0))
-        if "current_SensorLife_Percentage" in data:
-            kwargs["sensor_life_percentage"] = float(
-                data.get("current_SensorLife_Percentage", 0.0)
-            )
-
-        if kwargs:
-            kwargs["installed"] = True
-
-        base = existing or FreshWaterIQ()
+        kwargs = _parse_fwiq_parameters(data)
         return replace(base, **kwargs)
 
 
@@ -1547,4 +1545,76 @@ def _parse_energy_saving_control(control: dict[str, object]) -> dict[str, object
     if "duration" in control:
         with contextlib.suppress(ValueError, TypeError):
             kwargs["duration"] = int(str(control["duration"]))
+    return kwargs
+
+
+_FWIQ_STATUS_READING_KEYS: tuple[tuple[str, str, type[int | float]], ...] = (
+    ("Conductivity", "conductivity", int),
+    ("ORP", "orp", int),
+    ("Chlorine", "chlorine", float),
+    ("pH", "ph", float),
+    ("SensorLife", "sensor_life_percentage", float),
+)
+
+_FWIQ_PARAMS_READING_KEYS: tuple[tuple[str, str, type[int | float]], ...] = (
+    ("current_Current_CompConductivity", "conductivity", int),
+    ("current_ORP", "orp", int),
+    ("current_chlorine", "chlorine", float),
+    ("current_pH", "ph", float),
+    ("current_SensorLife_Percentage", "sensor_life_percentage", float),
+)
+
+
+_FWIQ_STATUS_META_KEYS: tuple[tuple[str, str, type[float | str]], ...] = (
+    ("Cl_CalibrationFactor", "cl_calibration_factor", float),
+    ("pH_CalibrationFactor", "ph_calibration_factor", float),
+    ("Regional_Cl_Selection", "regional_cl_selection", str),
+)
+
+
+def _normalize_fwiq_readings(
+    source: dict[str, object],
+    key_specs: tuple[tuple[str, str, type[int | float]], ...],
+) -> dict[str, int | float | None]:
+    """Parse and normalize FWIQ sensor readings.
+
+    The HNA firmware initializes FWIQ registers to ``0`` at boot before the
+    first UART packet arrives from the control box, and overwrites all five
+    registers with ``-1`` / ``-1.0`` when FWIQ is not installed or no sensor
+    readings are available. Negative values and payloads where no reading is
+    positive are normalized to ``None``.
+    """
+    readings: dict[str, int | float | None] = {}
+    for json_key, attr_name, converter in key_specs:
+        if (raw := source.get(json_key)) is not None:
+            val = converter(raw)
+            readings[attr_name] = val if val >= 0 else None
+
+    if readings and not any(v is not None and v > 0 for v in readings.values()):
+        return dict.fromkeys(readings, None)
+    return readings
+
+
+def _parse_fwiq_status(fwiq: dict[str, object]) -> dict[str, object]:
+    """Parse nested ``waterCare.status.FWIQstatus`` from GET /getFWIQData."""
+    installed = fwiq.get("FWIQinstalled", "notinstalled") != "notinstalled"
+    readings = _normalize_fwiq_readings(fwiq, _FWIQ_STATUS_READING_KEYS)
+    if not installed:
+        readings = dict.fromkeys(readings, None)
+
+    kwargs: dict[str, object] = {**readings, "installed": installed}
+    if (raw_state := fwiq.get("SystemState")) is not None:
+        kwargs["system_enabled"] = str(raw_state).strip().lower() == "enabled"
+    for json_key, attr_name, converter in _FWIQ_STATUS_META_KEYS:
+        if (raw_meta := fwiq.get(json_key)) is not None:
+            kwargs[attr_name] = converter(raw_meta)
+    return kwargs
+
+
+def _parse_fwiq_parameters(data: dict[str, object]) -> dict[str, object]:
+    """Parse flat ``FWIQ_Parameters`` from GET /status."""
+    readings = _normalize_fwiq_readings(data, _FWIQ_PARAMS_READING_KEYS)
+    kwargs: dict[str, object] = dict(readings)
+    if any(v is not None for v in readings.values()):
+        kwargs["installed"] = True
     return kwargs

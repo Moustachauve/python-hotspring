@@ -62,24 +62,60 @@
     ),
   })
 # ---
+# name: TestFreshWaterIQ.test_from_flat_dict_preserves_valid_zero_when_active
+  FreshWaterIQ(
+    chlorine=0.0,
+    cl_calibration_factor=None,
+    conductivity=2898,
+    installed=True,
+    orp=616,
+    ph=7.6,
+    ph_calibration_factor=None,
+    regional_cl_selection='',
+    sensor_life_percentage=0.0,
+    system_enabled=False,
+  )
+# ---
 # name: TestFreshWaterIQ.test_from_fwiq_endpoint
   FreshWaterIQ(
-    chlorine=-1.0,
-    conductivity=-1,
+    chlorine=None,
+    cl_calibration_factor=1.0,
+    conductivity=None,
     installed=False,
-    orp=-1,
-    ph=-1.0,
-    sensor_life_percentage=-1.0,
+    orp=None,
+    ph=None,
+    ph_calibration_factor=0.0,
+    regional_cl_selection='1-5ppm',
+    sensor_life_percentage=None,
+    system_enabled=False,
+  )
+# ---
+# name: TestFreshWaterIQ.test_from_fwiq_endpoint_installed
+  FreshWaterIQ(
+    chlorine=2.9,
+    cl_calibration_factor=1.0,
+    conductivity=2898,
+    installed=True,
+    orp=616,
+    ph=7.6,
+    ph_calibration_factor=0.0,
+    regional_cl_selection='1-5ppm',
+    sensor_life_percentage=58.316,
+    system_enabled=True,
   )
 # ---
 # name: TestFreshWaterIQ.test_from_status_dict
   FreshWaterIQ(
     chlorine=3.2,
+    cl_calibration_factor=None,
     conductivity=1500,
     installed=True,
     orp=650,
     ph=7.5,
+    ph_calibration_factor=None,
+    regional_cl_selection='',
     sensor_life_percentage=85.0,
+    system_enabled=False,
   )
 # ---
 # name: TestHeater.test_from_dict
@@ -265,11 +301,15 @@
     }),
     freshwater_iq=FreshWaterIQ(
       chlorine=3.2,
+      cl_calibration_factor=None,
       conductivity=1500,
       installed=True,
       orp=650,
       ph=7.5,
+      ph_calibration_factor=None,
+      regional_cl_selection='',
       sensor_life_percentage=85.0,
+      system_enabled=False,
     ),
     heater=Heater(
       current_temperature=100.0,

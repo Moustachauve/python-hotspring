@@ -450,19 +450,85 @@ class TestFreshWaterIQ:
 
     def test_from_empty_dict(self) -> None:
         """Test parsing FWIQ from empty dict uses defaults."""
-        fwiq = FreshWaterIQ.from_dict({})
-        assert fwiq.conductivity == 0
-        assert fwiq.ph == 0.0
-        assert fwiq.installed is False
+        assert FreshWaterIQ.from_dict({}) == FreshWaterIQ()
 
     def test_from_flat_dict_with_existing_not_installed(self) -> None:
         """Test flat parameters set installed=True on existing instance."""
-        existing = FreshWaterIQ(installed=False)
+        existing = FreshWaterIQ(installed=False, regional_cl_selection="1-5ppm")
         data: dict[str, object] = {"current_pH": 7.4, "current_chlorine": 2.5}
         fwiq = FreshWaterIQ.from_dict(data, existing=existing)
-        assert fwiq.installed is True
-        assert fwiq.ph == 7.4
-        assert fwiq.chlorine == 2.5
+        assert fwiq == FreshWaterIQ(
+            installed=True,
+            ph=7.4,
+            chlorine=2.5,
+            regional_cl_selection="1-5ppm",
+        )
+
+    @pytest.mark.parametrize(
+        "sentinel_data",
+        [
+            pytest.param(
+                {
+                    "current_Current_CompConductivity": -1,
+                    "current_ORP": -1,
+                    "current_chlorine": -1.0,
+                    "current_pH": -1.0,
+                    "current_SensorLife_Percentage": -1.0,
+                },
+                id="negative_one_sentinels",
+            ),
+            pytest.param(
+                {
+                    "current_Current_CompConductivity": 0,
+                    "current_ORP": 0,
+                    "current_chlorine": 0.0,
+                    "current_pH": 0.0,
+                    "current_SensorLife_Percentage": 0.0,
+                },
+                id="all_zero_pre_sync",
+            ),
+        ],
+    )
+    def test_from_flat_dict_sentinels_normalized_to_none(
+        self, sentinel_data: dict[str, object]
+    ) -> None:
+        """Test that -1 sentinels and all-zero pre-sync readings normalize to None."""
+        assert FreshWaterIQ.from_dict(sentinel_data) == FreshWaterIQ()
+
+    def test_from_flat_dict_preserves_valid_zero_when_active(
+        self, snapshot: SnapshotAssertion
+    ) -> None:
+        """Test that 0.0 readings are kept when other readings are positive."""
+        data: dict[str, object] = {
+            "current_Current_CompConductivity": 2898,
+            "current_ORP": 616,
+            "current_chlorine": 0.0,
+            "current_pH": 7.6,
+            "current_SensorLife_Percentage": 0.0,
+        }
+        assert FreshWaterIQ.from_dict(data) == snapshot
+
+    def test_from_fwiq_endpoint_installed(self, snapshot: SnapshotAssertion) -> None:
+        """Test parsing installed /getFWIQData payload with active readings."""
+        data: dict[str, object] = {
+            "waterCare": {
+                "status": {
+                    "FWIQstatus": {
+                        "FWIQinstalled": "installed",
+                        "pH": 7.6,
+                        "Chlorine": 2.9,
+                        "ORP": 616,
+                        "Conductivity": 2898,
+                        "SensorLife": 58.316,
+                        "SystemState": "enabled",
+                        "Cl_CalibrationFactor": 1.0,
+                        "pH_CalibrationFactor": 0.0,
+                        "Regional_Cl_Selection": "1-5ppm",
+                    }
+                }
+            }
+        }
+        assert FreshWaterIQ.from_dict(data) == snapshot
 
 
 class TestEnergySaving:
@@ -1236,6 +1302,39 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         # Omitted fields should retain their cached values
         assert spa.versions.control_box == "EG25.2100K0"
         assert spa.versions.control_panel == "HT25.1102F0"
+
+    def test_versions_fwiq_sets_installed(self) -> None:
+        """Test non-empty FWIQFirmwareVersion marks freshwater_iq as installed."""
+        spa = Spa({})
+        updated = spa.update_from_dict(
+            {
+                "productVersions": {
+                    "status": {
+                        "FWIQFirmwareVersion": "FQ24.1100N0",
+                    }
+                }
+            }
+        )
+        assert updated == {"versions", "freshwater_iq"}
+        assert spa.versions.fwiq == "FQ24.1100N0"
+        assert spa.freshwater_iq == FreshWaterIQ(installed=True)
+
+    def test_update_freshwater_iq_preserves_installed_when_firmware_present(
+        self, fwiq_response: dict[str, object]
+    ) -> None:
+        """Test /getFWIQData notinstalled keeps installed=True when firmware is set."""
+        spa = Spa(
+            {
+                "productVersions": {
+                    "status": {
+                        "FWIQFirmwareVersion": "FQ24.1100N0",
+                    }
+                }
+            }
+        )
+        spa.update_freshwater_iq(fwiq_response)
+        assert spa.freshwater_iq.installed is True
+        assert spa.freshwater_iq.regional_cl_selection == "1-5ppm"
 
     def test_jet_dict_from_dict_case_insensitive(self) -> None:
         """Test Jet.dict_from_dict parses case-insensitive keys."""
