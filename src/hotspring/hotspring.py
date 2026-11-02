@@ -97,8 +97,11 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         """
         url = URL.build(scheme="http", host=self.host, port=80, path=uri)
 
+        # The HNA's single HTTP worker should not be left holding an idle pooled
+        # socket from a shared session between polls.
         headers = {
             "Accept": "application/json, text/plain, */*",
+            "Connection": "close",
         }
 
         if self.session is None:
