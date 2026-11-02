@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import aiohttp
 import pytest
+from aiohttp import web
 from aresponses import Response, ResponsesMockServer
 
 from hotspring import (
@@ -1375,6 +1376,36 @@ class TestConnection:
             )
             with pytest.raises(HotSpringConnectionError):
                 await client.update()
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            pytest.param(200, id="success"),
+            pytest.param(500, id="server_error"),
+        ],
+    )
+    async def test_stalled_body_times_out(
+        self, aresponses: ResponsesMockServer, status: int
+    ) -> None:
+        """Test a body stalled after the headers is bounded by request_timeout."""
+
+        async def handler(request: web.Request) -> web.StreamResponse:
+            response = web.StreamResponse(status=status)
+            response.content_length = len(b'{"status": "ok"}')
+            await response.prepare(request)
+            await response.write(b'{"status"')
+            await asyncio.sleep(1)
+            await response.write(b': "ok"}')
+            return response
+
+        aresponses.add("192.168.1.100", "/status", "GET", handler)
+
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(
+                host="192.168.1.100", session=session, request_timeout=0.1
+            )
+            with pytest.raises(HotSpringConnectionTimeoutError):
+                await client.request("/status")
 
     async def test_client_error_with_retries(self) -> None:
         """Test ClientError triggers retries when request_retries is configured."""
