@@ -108,32 +108,36 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         attempts = 0
         while True:
             try:
-                async with asyncio.timeout(self.request_timeout):
-                    response = await self.session.request(
+                # Bound the body read too: a stalled body would otherwise hold
+                # the HNA's single HTTP worker until the caller's session
+                # timeout. Exiting mid-body closes the connection, never pools it.
+                async with (
+                    asyncio.timeout(self.request_timeout),
+                    self.session.request(
                         method,
                         url,
                         json=data,
                         headers=headers,
-                    )
+                    ) as response,
+                ):
+                    if response.status // 100 in [4, 5]:
+                        contents = await response.read()
 
-                if response.status // 100 in [4, 5]:
-                    contents = await response.read()
-                    response.close()
+                        try:
+                            raise HotSpringError(
+                                response.status,
+                                json.loads(contents.decode("utf8")),
+                            )
+                        except json.JSONDecodeError:
+                            raise HotSpringError(
+                                response.status,
+                                {"message": contents.decode("utf8")},
+                            ) from None
 
-                    try:
-                        raise HotSpringError(
-                            response.status,
-                            json.loads(contents.decode("utf8")),
-                        )
-                    except json.JSONDecodeError:
-                        raise HotSpringError(
-                            response.status,
-                            {"message": contents.decode("utf8")},
-                        ) from None
+                    # The spa returns JSON with text/html Content-Type,
+                    # so always try JSON parsing first.
+                    body = await response.text()
 
-                # The spa returns JSON with text/html Content-Type,
-                # so always try JSON parsing first.
-                body = await response.text()
                 try:
                     response_data = json.loads(body)
                 except json.JSONDecodeError as exc:
