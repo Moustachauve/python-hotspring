@@ -37,6 +37,13 @@ from .models import (
 )
 
 
+def _describe_exception(exception: BaseException) -> str:
+    """Return the exception type, plus its message when it has one."""
+    if detail := str(exception):
+        return f"{type(exception).__name__}: {detail}"
+    return type(exception).__name__
+
+
 @dataclass
 class HotSpring:  # pylint: disable=too-many-public-methods
     """Main class for handling connections with a Hot Spring Spa.
@@ -149,7 +156,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 if attempts > self.request_retries:
                     msg = (
                         f"Timeout occurred while connecting to Hot Spring HNA at "
-                        f"{self.host}"
+                        f"{self.host}: no response within {self.request_timeout}s"
                     )
                     raise HotSpringConnectionTimeoutError(msg) from exception
                 await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
@@ -158,7 +165,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 if attempts > self.request_retries:
                     msg = (
                         f"Error occurred while communicating with Hot Spring HNA at "
-                        f"{self.host}"
+                        f"{self.host}: {_describe_exception(exception)}"
                     )
                     raise HotSpringConnectionError(msg) from exception
                 await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
