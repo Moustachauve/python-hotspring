@@ -75,7 +75,7 @@ When creating a Pull Request with the GitHub CLI, always specify `--label`:
 gh pr create --draft --label bugfix
 ```
 
-Pull requests may be opened as drafts. Once you have reviewed the diff and confirmed that all checks in [Code Quality, Linting & Testing](#code-quality-linting--testing) pass, mark the pull request as **Ready for review** (`gh pr ready <number>`).
+Open pull requests as drafts. Once you have reviewed the diff and confirmed that all checks in [Code Quality, Linting & Testing](#code-quality-linting--testing) pass, mark the pull request as **Ready for review** (`gh pr ready <number>`).
 
 ## AI Policy
 
