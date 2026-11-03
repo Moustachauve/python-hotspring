@@ -75,6 +75,8 @@ When creating a Pull Request with the GitHub CLI, always specify `--label`:
 gh pr create --draft --label bugfix
 ```
 
+Pull requests may be opened as drafts. Once you have reviewed the diff and confirmed that all checks in [Code Quality, Linting & Testing](#code-quality-linting--testing) pass, mark the pull request as **Ready for review** (`gh pr ready <number>`).
+
 ## AI Policy
 
 AI tools are welcome as an assistant, but you must review, understand, and be able to explain every change you submit. Autonomous contributions (unreviewed PRs, issues, or comments generated without human oversight) are not accepted.
