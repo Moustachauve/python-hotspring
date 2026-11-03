@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
+import time
 from dataclasses import dataclass
 from typing import Self
 
@@ -35,6 +37,8 @@ from .models import (
     Spa,
     SpaInfo,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _describe_exception(exception: BaseException) -> str:
@@ -114,6 +118,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
         attempts = 0
         while True:
+            started = time.monotonic()
             try:
                 async with asyncio.timeout(self.request_timeout):
                     response = await self.session.request(
@@ -151,8 +156,15 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                     msg = f"Unexpected response type from {uri}"
                     raise HotSpringError(msg)
 
-            except asyncio.TimeoutError as exception:  # noqa: PERF203
+            except asyncio.TimeoutError as exception:
                 attempts += 1
+                _LOGGER.debug(
+                    "%s %s attempt %d timed out after %.2fs",
+                    method,
+                    uri,
+                    attempts,
+                    time.monotonic() - started,
+                )
                 if attempts > self.request_retries:
                     msg = (
                         f"Timeout occurred while connecting to Hot Spring HNA at "
@@ -162,6 +174,14 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
             except aiohttp.ClientError as exception:
                 attempts += 1
+                _LOGGER.debug(
+                    "%s %s attempt %d failed after %.2fs: %s",
+                    method,
+                    uri,
+                    attempts,
+                    time.monotonic() - started,
+                    _describe_exception(exception),
+                )
                 if attempts > self.request_retries:
                     msg = (
                         f"Error occurred while communicating with Hot Spring HNA at "
@@ -170,6 +190,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                     raise HotSpringConnectionError(msg) from exception
                 await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
             else:
+                _LOGGER.debug(
+                    "%s %s -> %d in %.2fs",
+                    method,
+                    uri,
+                    response.status,
+                    time.monotonic() - started,
+                )
                 return response_data
 
     async def _safe_request(self, uri: str) -> dict[str, object] | None:
