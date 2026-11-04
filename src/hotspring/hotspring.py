@@ -8,7 +8,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import aiohttp
 from yarl import URL
@@ -38,6 +38,9 @@ from .models import (
     SpaInfo,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -46,6 +49,16 @@ def _describe_exception(exception: BaseException) -> str:
     if detail := str(exception):
         return f"{type(exception).__name__}: {detail}"
     return type(exception).__name__
+
+
+@contextlib.contextmanager
+def _parsing(uri: str) -> Iterator[None]:
+    """Raise a model parser's failure on a malformed payload as HotSpringError."""
+    try:
+        yield
+    except (AttributeError, KeyError, TypeError, ValueError) as exception:
+        msg = f"Unexpected data from {uri}: {exception!r}"
+        raise HotSpringError(msg) from exception
 
 
 @dataclass
@@ -238,7 +251,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ------
             HotSpringSNADetectedError: If connected to a Spa Network Adapter (SNA)
                 and ``validate_device`` is True.
-            HotSpringError: If no data is returned from the spa.
+            HotSpringError: If no data, or malformed data, is returned from the spa.
 
         """
         if not self._identity_loaded or refresh_identity:
@@ -247,19 +260,23 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             connect_res = await self._safe_request("/spaConnectStatus")
             model_res = await self._safe_request("/spamodel")
 
-            if self.spa is None:
-                self.spa = Spa(status_res)
-            else:
-                self.spa.update_from_dict(status_res)
+            with _parsing("/status"):
+                if self.spa is None:
+                    self.spa = Spa(status_res)
+                else:
+                    self.spa.update_from_dict(status_res)
 
             if startup_res:
-                self.spa.update_info(startup_res)
+                with _parsing("/startup"):
+                    self.spa.update_info(startup_res)
 
             if model_res:
-                self.spa.update_info(model_res)
+                with _parsing("/spamodel"):
+                    self.spa.update_info(model_res)
 
             if connect_res:
-                self.spa.update_connection_status(connect_res)
+                with _parsing("/spaConnectStatus"):
+                    self.spa.update_connection_status(connect_res)
             elif (
                 self.spa.connection_status
                 and not self.spa.connection_status.spa_connected
@@ -281,13 +298,15 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         status_res = await self.request("/status")
         connect_res = await self._safe_request("/spaConnectStatus")
 
-        if self.spa is None:  # Safety guard; spa is always set after cold sync
-            self.spa = Spa(status_res)
-        else:
-            self.spa.update_from_dict(status_res)
+        with _parsing("/status"):
+            if self.spa is None:  # Safety guard; spa is always set after cold sync
+                self.spa = Spa(status_res)
+            else:
+                self.spa.update_from_dict(status_res)
 
         if connect_res:
-            self.spa.update_connection_status(connect_res)
+            with _parsing("/spaConnectStatus"):
+                self.spa.update_connection_status(connect_res)
         elif (
             self.spa.connection_status and not self.spa.connection_status.spa_connected
         ):
@@ -313,7 +332,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
         """
         data = await self.request("/startup")
-        return SpaInfo.from_dict(data)
+        with _parsing("/startup"):
+            return SpaInfo.from_dict(data)
 
     async def update_identity(self) -> SpaInfo:
         """Fetch and update static spa identity info (/startup and /spamodel).
@@ -343,7 +363,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             identity_data.update(model_res)
 
         if identity_data:
-            self.spa.update_info(identity_data)
+            with _parsing("/startup and /spamodel"):
+                self.spa.update_info(identity_data)
 
         if self.validate_device and not self.spa.is_hna:
             msg = (
@@ -378,7 +399,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = "Call update() before update_water_care()"
             raise HotSpringError(msg)
 
-        self.spa.update_freshwater_iq(data)
+        with _parsing("/getFWIQData"):
+            self.spa.update_freshwater_iq(data)
         return self.spa.freshwater_iq
 
     async def update_diagnostics(self) -> Diagnostics:
@@ -402,7 +424,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = "Call update() before update_diagnostics()"
             raise HotSpringError(msg)
 
-        self.spa.update_diagnostics(data)
+        with _parsing("/addDebugData"):
+            self.spa.update_diagnostics(data)
         return self.spa.diagnostics
 
     async def update_connection_status(self) -> ConnectionStatus:
@@ -423,7 +446,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = "Call update() before update_connection_status()"
             raise HotSpringError(msg)
 
-        self.spa.update_connection_status(data)
+        with _parsing("/spaConnectStatus"):
+            self.spa.update_connection_status(data)
         return self.spa.connection_status
 
     async def _send_command(self, payload: dict[str, object]) -> None:
@@ -459,7 +483,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 "/spaManager", method="POST", data=payload
             )
             if self.spa is not None:
-                self.spa.update_from_dict(response_data)
+                with _parsing("/spaManager"):
+                    self.spa.update_from_dict(response_data)
         except HotSpringError as exception:
             msg = f"Command failed: {payload}"
             raise HotSpringCommandError(msg) from exception
