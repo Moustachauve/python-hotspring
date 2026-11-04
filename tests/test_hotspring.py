@@ -587,6 +587,165 @@ class TestUpdateDiagnostics:
         assert diag == snapshot
 
 
+def _raw_json(payload: object) -> Response:
+    """Create a JSON response from an inline payload."""
+    return Response(
+        status=200,
+        headers={"Content-Type": "application/json"},
+        text=json.dumps(payload),
+    )
+
+
+class TestMalformedResponse:
+    """Tests for well-formed JSON whose fields fail to parse."""
+
+    @pytest.mark.parametrize(
+        ("payload", "cause_type"),
+        [
+            pytest.param(
+                {"heater": {"status": {"heaterCurrent": ""}}},
+                ValueError,
+                id="empty_string_number",
+            ),
+            pytest.param(
+                {"heater": {"status": {"heaterCurrent": None}}},
+                TypeError,
+                id="null_number",
+            ),
+            pytest.param(
+                {"lights": {"zone1": {"status": {"color": []}}}},
+                AttributeError,
+                id="list_for_string",
+            ),
+        ],
+    )
+    async def test_malformed_status_on_first_update(
+        self,
+        aresponses: ResponsesMockServer,
+        payload: dict[str, object],
+        cause_type: type[Exception],
+    ) -> None:
+        """Test a malformed /status raises HotSpringError naming the endpoint."""
+        host = "192.168.1.100"
+        aresponses.add(host, "/status", "GET", _raw_json(payload))
+        aresponses.add(host, "/startup", "GET", _json_response("startup.json"))
+        aresponses.add(
+            host, "/spaConnectStatus", "GET", _json_response("spa_connect_status.json")
+        )
+        aresponses.add(host, "/spamodel", "GET", _json_response("spamodel.json"))
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host=host, session=session)
+            with pytest.raises(HotSpringError) as exc_info:
+                await client.update()
+
+        assert exc_info.type is HotSpringError
+        assert str(exc_info.value).startswith("Unexpected data from /status: ")
+        assert isinstance(exc_info.value.__cause__, cause_type)
+
+    async def test_malformed_status_on_poll(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test a malformed /status on a routine poll raises HotSpringError."""
+        _add_update_mocks(aresponses)
+        aresponses.add(
+            "192.168.1.100",
+            "/status",
+            "GET",
+            _raw_json({"JET": {"JET1": {"status": {"jet_1_ON_sec": ""}}}}),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            "/spaConnectStatus",
+            "GET",
+            _json_response("spa_connect_status.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(HotSpringError) as exc_info:
+                await client.update()
+
+        assert str(exc_info.value) == (
+            "Unexpected data from /status: "
+            "ValueError(\"invalid literal for int() with base 10: ''\")"
+        )
+        assert isinstance(exc_info.value.__cause__, ValueError)
+
+    @pytest.mark.parametrize(
+        ("uri", "payload", "method"),
+        [
+            pytest.param(
+                "/getFWIQData",
+                {"waterCare": {"status": {"FWIQstatus": {"pH": "n/a"}}}},
+                "update_water_care",
+                id="water_care",
+            ),
+            pytest.param(
+                "/addDebugData",
+                {"debugData": {"status": {"L1_N_Volts": "n/a"}}},
+                "update_diagnostics",
+                id="diagnostics",
+            ),
+        ],
+    )
+    async def test_malformed_secondary_endpoint(
+        self,
+        aresponses: ResponsesMockServer,
+        uri: str,
+        payload: dict[str, object],
+        method: str,
+    ) -> None:
+        """Test a malformed secondary endpoint raises HotSpringError naming it."""
+        _add_update_mocks(aresponses)
+        aresponses.add("192.168.1.100", uri, "GET", _raw_json(payload))
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(HotSpringError) as exc_info:
+                await getattr(client, method)()
+
+        assert str(exc_info.value).startswith(f"Unexpected data from {uri}: ")
+        assert isinstance(exc_info.value.__cause__, ValueError)
+
+    async def test_malformed_device_info(self, aresponses: ResponsesMockServer) -> None:
+        """Test a malformed /startup raises HotSpringError naming the endpoint."""
+        aresponses.add(
+            "192.168.1.100",
+            "/startup",
+            "GET",
+            _raw_json({"SPAModelData": {"status": {"volume": "n/a"}}}),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            with pytest.raises(HotSpringError) as exc_info:
+                await client.get_device_info()
+
+        assert str(exc_info.value).startswith("Unexpected data from /startup: ")
+        assert isinstance(exc_info.value.__cause__, ValueError)
+
+    async def test_malformed_command_echo(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test a malformed command echo is a command error naming the endpoint."""
+        _add_update_mocks(aresponses)
+        aresponses.add(
+            "192.168.1.100",
+            "/spaManager",
+            "POST",
+            _raw_json({"heater": {"status": {"heaterCurrent": ""}}}),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(HotSpringCommandError) as exc_info:
+                await client.set_temperature(102)
+
+        parse_error = exc_info.value.__cause__
+        assert isinstance(parse_error, HotSpringError)
+        assert str(parse_error).startswith("Unexpected data from /spaManager: ")
+        assert isinstance(parse_error.__cause__, ValueError)
+
+
 class TestCommands:  # pylint: disable=too-many-public-methods
     """Tests for control command methods."""
 
