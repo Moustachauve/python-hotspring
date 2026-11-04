@@ -148,9 +148,9 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 body = await response.text()
                 try:
                     response_data = json.loads(body)
-                except json.JSONDecodeError as exc:
+                except json.JSONDecodeError as exception:
                     msg = f"Invalid JSON response from {uri}: {body[:200]}"
-                    raise HotSpringError(msg) from exc
+                    raise HotSpringError(msg) from exception
 
                 if not isinstance(response_data, dict):
                     msg = f"Unexpected response type from {uri}"
@@ -174,18 +174,19 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
             except aiohttp.ClientError as exception:
                 attempts += 1
+                cause = _describe_exception(exception)
                 _LOGGER.debug(
                     "%s %s attempt %d failed after %.2fs: %s",
                     method,
                     uri,
                     attempts,
                     time.monotonic() - started,
-                    _describe_exception(exception),
+                    cause,
                 )
                 if attempts > self.request_retries:
                     msg = (
                         f"Error occurred while communicating with Hot Spring HNA at "
-                        f"{self.host}: {_describe_exception(exception)}"
+                        f"{self.host}: {cause}"
                     )
                     raise HotSpringConnectionError(msg) from exception
                 await asyncio.sleep(0.5 * (2 ** (attempts - 1)))
