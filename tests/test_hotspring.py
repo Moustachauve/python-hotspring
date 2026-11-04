@@ -1431,6 +1431,30 @@ class TestConnection:
             assert call_count == 2
 
     @pytest.mark.parametrize(
+        ("method", "uri"),
+        [
+            pytest.param("GET", "/status", id="poll"),
+            pytest.param("POST", "/spaManager", id="command"),
+        ],
+    )
+    async def test_request_sends_connection_close(
+        self, aresponses: ResponsesMockServer, method: str, uri: str
+    ) -> None:
+        """Test every request asks the HNA to close the socket afterwards."""
+        received: list[str | None] = []
+
+        async def handler(request: aiohttp.web.Request) -> Response:
+            received.append(request.headers.get("Connection"))
+            return Response(status=200, text='{"status": "ok"}')
+
+        aresponses.add("192.168.1.100", uri, method, handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.request(uri, method=method)
+
+        assert received == ["close"]
+
+    @pytest.mark.parametrize(
         ("error", "expected_cause"),
         [
             pytest.param(
