@@ -43,37 +43,31 @@ poetry run pytest --snapshot-update
 
 ## Submitting a Pull Request
 
-1. Create a feature branch from `main`:
+1. Create a feature branch from `main` using a descriptive prefix (e.g., `feat/`, `fix/`, `docs/`):
    ```bash
    git checkout -b feat/my-change main
    ```
 2. Write focused commits with a concise imperative subject line and a body explaining **why** the change is needed.
 3. Do not amend, squash, or force-push commits after a Pull Request has been opened and reviewed, so reviewers can easily track incremental changes.
-4. Open a Pull Request targeting `main` and apply **one** required PR label.
+4. Open a Pull Request targeting `main`.
+
+## Pull Request Reviews
+
+Only Pull Requests marked as **Ready for review** are reviewed. If your Pull Request is still a work in progress or you are waiting on local verification, keep it as a **Draft** and mark it as ready for review once all checks in [Code Quality, Linting & Testing](#code-quality-linting--testing) pass.
 
 ## Pull Request Labels
 
-Every Pull Request **must** have **exactly one** label from the table below. This is enforced in CI by [`.github/workflows/pr-labels.yaml`](.github/workflows/pr-labels.yaml) (`mheap/github-action-required-labels`) and used by [`.github/release-drafter.yml`](.github/release-drafter.yml) to categorize release notes and resolve the next [Semantic Version](https://semver.org/) (`MAJOR.MINOR.PATCH`):
+Every Pull Request **must** have **exactly one** label from the table below. Labels are applied automatically by [`.github/labeler.yml`](.github/labeler.yml) based on your branch prefix or changed file paths, enforced in CI by [`.github/workflows/pr-labels.yaml`](.github/workflows/pr-labels.yaml), and used by [`.github/release-drafter.yml`](.github/release-drafter.yml) to categorize release notes and resolve the next [Semantic Version](https://semver.org/) (`MAJOR.MINOR.PATCH`):
 
-| Label             | Version Bump | Release Category      | Description                                          |
-| :---------------- | :----------- | :-------------------- | :--------------------------------------------------- |
-| `breaking-change` | **Major**    | 🚨 Breaking changes   | Introduces an incompatible API or data model change  |
-| `new-feature`     | **Minor**    | ✨ New features       | Introduces a backwards-compatible new feature        |
-| `bugfix`          | **Patch**    | 🐛 Bug fixes          | Fixes a bug                                          |
-| `enhancement`     | **Patch**    | 🚀 Enhancements       | Improvements or additions to existing features       |
-| `refactor`        | **Patch**    | 🚀 Enhancements       | Code refactoring without changing external behavior  |
-| `performance`     | **Patch**    | 🚀 Enhancements       | Performance improvements                             |
-| `maintenance`     | **Patch**    | 🧰 Maintenance        | Housekeeping, e.g., test updates or internal cleanup |
-| `ci`              | **Patch**    | 🧰 Maintenance        | Changes to CI/CD workflows                           |
-| `documentation`   | **Patch**    | 📚 Documentation      | Changes to documentation                             |
-| `dependencies`    | **Patch**    | ⬆️ Dependency updates | Updates to dependencies                              |
-| `chore`           | **Patch**    | _(Uncategorized)_     | Routine tasks                                        |
-
-When creating a Pull Request with the GitHub CLI, always specify `--label`:
-
-```bash
-gh pr create --draft --label bugfix
-```
+| Label             | Version Bump | Release Category      | Branch Prefix                      | Description                                         |
+| :---------------- | :----------- | :-------------------- | :--------------------------------- | :-------------------------------------------------- |
+| `breaking-change` | **Major**    | 🚨 Breaking changes   | `breaking/`                        | Introduces an incompatible API or data model change |
+| `new-feature`     | **Minor**    | ✨ New features       | `feat/`, `feature/`                | Introduces a backwards-compatible new feature       |
+| `bugfix`          | **Patch**    | 🐛 Bug fixes          | `fix/`, `bugfix/`, `hotfix/`       | Fixes a bug                                         |
+| `enhancement`     | **Patch**    | 🚀 Enhancements       | `enhance/`, `refactor/`, `perf/`   | Improvements, refactoring, or performance updates   |
+| `maintenance`     | **Patch**    | 🧰 Maintenance        | `maint/`, `chore/`, `ci/`, `test/` | Housekeeping, CI/CD, test updates, or routine tasks |
+| `documentation`   | **Patch**    | 📚 Documentation      | `docs/`, `doc/`                    | Changes to documentation                            |
+| `dependencies`    | **Patch**    | ⬆️ Dependency updates | `deps/`, `renovate/`               | Updates to dependencies                             |
 
 ## AI Policy
 

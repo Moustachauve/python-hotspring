@@ -17,12 +17,9 @@ categories:
   - title: "🚀 Enhancements"
     labels:
       - "enhancement"
-      - "refactor"
-      - "performance"
   - title: "🧰 Maintenance"
     labels:
       - "maintenance"
-      - "ci"
   - title: "📚 Documentation"
     labels:
       - "documentation"
@@ -34,22 +31,17 @@ categories:
 version-resolver:
   major:
     labels:
-      - "major"
       - "breaking-change"
   minor:
     labels:
-      - "minor"
       - "new-feature"
   patch:
     labels:
       - "bugfix"
-      - "chore"
-      - "ci"
       - "dependencies"
       - "documentation"
       - "enhancement"
-      - "performance"
-      - "refactor"
+      - "maintenance"
   default: patch
 
 template: |
