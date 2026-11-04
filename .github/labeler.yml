@@ -1,0 +1,56 @@
+---
+breaking-change:
+  - head-branch:
+      - "^breaking[-/]"
+
+new-feature:
+  - head-branch:
+      - "^(feat|feature)[-/]"
+
+bugfix:
+  - head-branch:
+      - "^(fix|bugfix|hotfix)[-/]"
+
+enhancement:
+  - head-branch:
+      - "^(enhance|enhancement|refactor|perf|performance)[-/]"
+
+maintenance:
+  - any:
+      - head-branch:
+          - "^(maint|maintenance|chore|ci|test|tests|build)[-/]"
+      - changed-files:
+          - any-glob-to-all-files:
+              - "{.github/**,.gitignore,.pre-commit-config.yaml,.yamllint.yaml}"
+  - all:
+      - head-branch:
+          - "^(?!(breaking|feat|feature|fix|bugfix|hotfix|enhance|enhancement|refactor|perf|performance|doc|docs|dep|deps|dependencies|renovate)[-/])"
+
+documentation:
+  - any:
+      - head-branch:
+          - "^(doc|docs)[-/]"
+      - changed-files:
+          - all-globs-to-all-files:
+              - "**/*.md"
+              - "!.github/**"
+  - all:
+      - head-branch:
+          - "^(?!(breaking|feat|feature|fix|bugfix|hotfix|enhance|enhancement|refactor|perf|performance|maint|maintenance|chore|ci|test|tests|build|dep|deps|dependencies|renovate)[-/])"
+
+dependencies:
+  - any:
+      - head-branch:
+          - "^(dep|deps|dependencies|renovate)[-/]"
+      - changed-files:
+          - any-glob-to-all-files:
+              - "{poetry.lock,pyproject.toml}"
+  - any:
+      - head-branch:
+          - "^(dep|deps|dependencies|renovate)[-/]"
+      - changed-files:
+          - any-glob-to-any-file:
+              - "poetry.lock"
+  - all:
+      - head-branch:
+          - "^(?!(breaking|feat|feature|fix|bugfix|hotfix|enhance|enhancement|refactor|perf|performance|maint|maintenance|chore|ci|test|tests|build|doc|docs)[-/])"
