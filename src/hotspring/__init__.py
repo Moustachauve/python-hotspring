@@ -3,6 +3,7 @@
 from .const import (
     BrightnessLevel,
     DeviceType,
+    Endpoint,
     EnergySavingMode,
     HeatingMode,
     JetSpeed,
@@ -49,6 +50,7 @@ __all__ = [
     "ConnectionStatus",
     "DeviceType",
     "Diagnostics",
+    "Endpoint",
     "EnergySaving",
     "EnergySavingMode",
     "FreshWaterIQ",
