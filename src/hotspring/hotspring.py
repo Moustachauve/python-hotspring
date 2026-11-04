@@ -444,7 +444,9 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             HotSpringNotReadyError: If the SNA bridge is not connected.
-            HotSpringCommandError: If the command fails.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         if self.spa is not None and not self.spa.connection_status.spa_connected:
@@ -460,8 +462,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             )
             if self.spa is not None:
                 self.spa.update_from_dict(response_data)
+        except HotSpringConnectionError:
+            raise
         except HotSpringError as exception:
-            msg = f"Command failed: {payload}"
+            msg = f"Command failed: {payload}: {exception}"
             raise HotSpringCommandError(msg) from exception
 
     async def set_temperature(self, temperature: float) -> None:
@@ -564,6 +568,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If brightness is not an integer between 0 and 5.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
 
         """
         if not 0 <= brightness <= 5:
@@ -633,6 +639,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If any RGB component is not between 0 and 255.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
 
         """
         for component in (red, green, blue):
@@ -745,6 +753,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If level is not an integer between 0 and 10.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
 
         """
         if not 0 <= level <= 10:
@@ -768,6 +778,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If neither power_a nor power_b is specified.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
 
         """
         cfg: dict[str, object] = {}
@@ -791,6 +803,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If the brightness level is unrecognized.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
 
         """
         brightness = (
@@ -830,6 +844,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If schedule_id or time/duration parameters are invalid.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
 
         """
         if schedule_id not in VALID_ENERGY_SAVING_SCHEDULE_IDS:
@@ -884,6 +900,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If time parameters are out of range.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
 
         """
         if not 0 <= start_hour <= 23:
