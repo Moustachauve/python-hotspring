@@ -8,6 +8,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from http import HTTPMethod
 from typing import TYPE_CHECKING, Self
 
 import aiohttp
@@ -91,7 +92,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
     async def request(
         self,
         uri: str = "",
-        method: str = "GET",
+        method: HTTPMethod | str = HTTPMethod.GET,
         data: dict[str, object] | None = None,
     ) -> dict[str, object]:
         """Handle a request to the Hot Spring HNA.
@@ -103,7 +104,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Args:
         ----
             uri: Request URI, for example ``/status``.
-            method: HTTP method to use for the request.
+            method: HTTP method (``HTTPMethod`` or its string value).
             data: Dictionary of data to send to the HNA.
 
         Returns:
@@ -232,7 +233,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         endpoint: Endpoint,
         parse: Callable[[dict[str, object]], T],
         *,
-        method: str = "GET",
+        method: HTTPMethod | str = HTTPMethod.GET,
         data: dict[str, object] | None = None,
     ) -> T:
         """Request an endpoint and parse its response, naming it on bad data.
@@ -508,7 +509,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             await self._fetch(
                 Endpoint.SPA_MANAGER,
                 self._apply_command_response,
-                method="POST",
+                method=HTTPMethod.POST,
                 data=payload,
             )
         except HotSpringConnectionError:

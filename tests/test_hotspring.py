@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+from http import HTTPMethod
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -73,18 +74,20 @@ def _add_update_mocks(  # noqa: PLR0913
 ) -> None:
     """Add mock responses for a full update() call."""
     host = "192.168.1.100"
-    aresponses.add(host, Endpoint.STATUS, "GET", _json_response(status_fixture))
+    aresponses.add(
+        host, Endpoint.STATUS, HTTPMethod.GET, _json_response(status_fixture)
+    )
     aresponses.add(
         host,
         Endpoint.STARTUP,
-        "GET",
+        HTTPMethod.GET,
         _json_response(startup_fixture, status=startup_status),
     )
     connect = connect_payload or _load("spa_connect_status.json")
     aresponses.add(
         host,
         Endpoint.SPA_CONNECT_STATUS,
-        "GET",
+        HTTPMethod.GET,
         Response(
             status=200,
             headers={"Content-Type": "application/json"},
@@ -94,7 +97,7 @@ def _add_update_mocks(  # noqa: PLR0913
     aresponses.add(
         host,
         Endpoint.SPA_MODEL,
-        "GET",
+        HTTPMethod.GET,
         _json_response("spamodel.json", status=spamodel_status),
     )
 
@@ -119,7 +122,7 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             Response(
                 status=200,
                 headers={"Content-Type": "text/html"},
@@ -130,7 +133,7 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             Response(
                 status=200,
                 headers={"Content-Type": "text/html"},
@@ -140,7 +143,7 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             Response(
                 status=200,
                 headers={"Content-Type": "text/html"},
@@ -161,13 +164,13 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("status.json"),
         )
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_CONNECT_STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spa_connect_status.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -185,13 +188,13 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("status.json"),
         )
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_CONNECT_STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spa_connect_status.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -215,13 +218,13 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("status.json"),
         )
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_CONNECT_STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spa_connect_status.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -266,13 +269,13 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STARTUP,
-            "GET",
+            HTTPMethod.GET,
             _json_response("startup.json"),
         )
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_MODEL,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spamodel.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -292,13 +295,13 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STARTUP,
-            "GET",
+            HTTPMethod.GET,
             Response(status=500, text="error"),
         )
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_MODEL,
-            "GET",
+            HTTPMethod.GET,
             Response(status=500, text="error"),
         )
         async with aiohttp.ClientSession() as session:
@@ -455,7 +458,7 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STARTUP,
-            "GET",
+            HTTPMethod.GET,
             _json_response(startup_fixture),
         )
         async with aiohttp.ClientSession() as session:
@@ -476,13 +479,13 @@ class TestUpdate:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STARTUP,
-            "GET",
+            HTTPMethod.GET,
             _json_response("startup_sna.json"),
         )
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_MODEL,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spamodel.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -502,25 +505,25 @@ class TestUpdate:
             aresponses.add(
                 "192.168.1.100",
                 Endpoint.STATUS,
-                "GET",
+                HTTPMethod.GET,
                 Response(status=500, text="error"),
             )
             aresponses.add(
                 "192.168.1.100",
                 Endpoint.STARTUP,
-                "GET",
+                HTTPMethod.GET,
                 _json_response("startup.json"),
             )
             aresponses.add(
                 "192.168.1.100",
                 Endpoint.SPA_CONNECT_STATUS,
-                "GET",
+                HTTPMethod.GET,
                 _json_response("spa_connect_status.json"),
             )
             aresponses.add(
                 "192.168.1.100",
                 Endpoint.SPA_MODEL,
-                "GET",
+                HTTPMethod.GET,
                 _json_response("spamodel.json"),
             )
         async with aiohttp.ClientSession() as session:
@@ -540,7 +543,7 @@ class TestUpdateWaterCare:
         aresponses.add(
             "192.168.1.100",
             Endpoint.FRESHWATER_IQ,
-            "GET",
+            HTTPMethod.GET,
             _json_response("fwiq_data.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -557,7 +560,7 @@ class TestUpdateWaterCare:
         aresponses.add(
             "192.168.1.100",
             Endpoint.FRESHWATER_IQ,
-            "GET",
+            HTTPMethod.GET,
             _json_response("fwiq_data.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -577,7 +580,7 @@ class TestUpdateDiagnostics:
         aresponses.add(
             "192.168.1.100",
             Endpoint.DEBUG_DATA,
-            "GET",
+            HTTPMethod.GET,
             _json_response("debug_data.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -628,15 +631,19 @@ class TestMalformedResponse:
     ) -> None:
         """Test a malformed /status raises HotSpringError naming the endpoint."""
         host = "192.168.1.100"
-        aresponses.add(host, Endpoint.STATUS, "GET", _raw_json(payload))
-        aresponses.add(host, Endpoint.STARTUP, "GET", _json_response("startup.json"))
+        aresponses.add(host, Endpoint.STATUS, HTTPMethod.GET, _raw_json(payload))
+        aresponses.add(
+            host, Endpoint.STARTUP, HTTPMethod.GET, _json_response("startup.json")
+        )
         aresponses.add(
             host,
             Endpoint.SPA_CONNECT_STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spa_connect_status.json"),
         )
-        aresponses.add(host, Endpoint.SPA_MODEL, "GET", _json_response("spamodel.json"))
+        aresponses.add(
+            host, Endpoint.SPA_MODEL, HTTPMethod.GET, _json_response("spamodel.json")
+        )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host=host, session=session)
             with pytest.raises(HotSpringError) as exc_info:
@@ -654,13 +661,13 @@ class TestMalformedResponse:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             _raw_json({"JET": {"JET1": {"status": {"jet_1_ON_sec": ""}}}}),
         )
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_CONNECT_STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spa_connect_status.json"),
         )
         async with aiohttp.ClientSession() as session:
@@ -701,7 +708,7 @@ class TestMalformedResponse:
     ) -> None:
         """Test a malformed secondary endpoint raises HotSpringError naming it."""
         _add_update_mocks(aresponses)
-        aresponses.add("192.168.1.100", uri, "GET", _raw_json(payload))
+        aresponses.add("192.168.1.100", uri, HTTPMethod.GET, _raw_json(payload))
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -716,7 +723,7 @@ class TestMalformedResponse:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STARTUP,
-            "GET",
+            HTTPMethod.GET,
             _raw_json({"SPAModelData": {"status": {"volume": "n/a"}}}),
         )
         async with aiohttp.ClientSession() as session:
@@ -735,7 +742,7 @@ class TestMalformedResponse:
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_MANAGER,
-            "POST",
+            HTTPMethod.POST,
             _raw_json({"heater": {"status": {"heaterCurrent": ""}}}),
         )
         async with aiohttp.ClientSession() as session:
@@ -762,7 +769,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"heater": {"control": {"temperatureABS": "102"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -777,7 +784,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"heater": {"control": {"temperatureABS": "38.5"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -792,7 +799,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"JET": {"JET1": {"control": "highSpeed"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -807,7 +814,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"JET": {"JET2": {"control": "lowSpeed"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -832,7 +839,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             }
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -857,7 +864,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             }
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -874,7 +881,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             }
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -899,7 +906,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             }
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -938,7 +945,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             }
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -967,7 +974,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             }
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -996,7 +1003,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"heater": {"control": {"heatingMode": "heatWithBoost"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1011,7 +1018,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"heater": {"control": {"heatingMode": "heatWithBoost"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1026,7 +1033,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"cleanCycle": {"control": {"cleanCycle": "on"}}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1041,7 +1048,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             assert data == {"blower": {"control": "on"}}
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1067,8 +1074,12 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 text=json.dumps({"spaLock": {"status": {"spaLock": "off"}}}),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler_on)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler_off)
+        aresponses.add(
+            "192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler_on
+        )
+        aresponses.add(
+            "192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler_off
+        )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1098,8 +1109,12 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 text=json.dumps({"heater": {"status": {"heaterLock": "off"}}}),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler_on)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler_off)
+        aresponses.add(
+            "192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler_on
+        )
+        aresponses.add(
+            "192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler_off
+        )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1121,7 +1136,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 text=json.dumps({"cleanCycle": {"status": {"vanishingAct": "on"}}}),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1141,8 +1156,8 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 text=json.dumps({"waterCare": {"status": {"boost": "active"}}}),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1164,7 +1179,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 text=json.dumps({"waterCare": {"status": {"level": 7}}}),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1205,7 +1220,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 ),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1229,12 +1244,12 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             calls.append(data)
             return Response(status=200, text='{"status": "ok"}')
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
@@ -1306,7 +1321,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 ),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1374,7 +1389,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 ),
             )
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", handler)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
@@ -1443,8 +1458,12 @@ class TestCommands:  # pylint: disable=too-many-public-methods
             }
             return Response(status=200, text=json.dumps(resp))
 
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", light_handler)
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", jet_handler)
+        aresponses.add(
+            "192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, light_handler
+        )
+        aresponses.add(
+            "192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, jet_handler
+        )
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
@@ -1490,7 +1509,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
         aresponses.add(
             "192.168.1.100",
             Endpoint.SPA_MANAGER,
-            "POST",
+            HTTPMethod.POST,
             Response(status=500, text="error"),
         )
         async with aiohttp.ClientSession() as session:
@@ -1524,7 +1543,7 @@ class TestCommands:  # pylint: disable=too-many-public-methods
         expected_cause: str,
     ) -> None:
         """Test a rejected command names the underlying error and chains it."""
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", response)
+        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, response)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             with pytest.raises(HotSpringCommandError) as exc_info:
@@ -1541,7 +1560,9 @@ class TestCommands:  # pylint: disable=too-many-public-methods
         self, aresponses: ResponsesMockServer
     ) -> None:
         """Test a command timeout surfaces as a timeout, not a command error."""
-        aresponses.add("192.168.1.100", Endpoint.SPA_MANAGER, "POST", _timeout_handler)
+        aresponses.add(
+            "192.168.1.100", Endpoint.SPA_MANAGER, HTTPMethod.POST, _timeout_handler
+        )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
                 host="192.168.1.100", session=session, request_timeout=0.1
@@ -1592,7 +1613,9 @@ class TestConnection:
     ) -> None:
         """Test that with default request_retries=0, failure is immediate."""
         # Fails on the very first attempt without retrying
-        aresponses.add("192.168.1.100", Endpoint.STATUS, "GET", _timeout_handler)
+        aresponses.add(
+            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _timeout_handler
+        )
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
@@ -1607,9 +1630,15 @@ class TestConnection:
     ) -> None:
         """Test connection error retries when request_retries is configured."""
         # Backoff retries request_retries + 1 = 3 times
-        aresponses.add("192.168.1.100", Endpoint.STATUS, "GET", _timeout_handler)
-        aresponses.add("192.168.1.100", Endpoint.STATUS, "GET", _timeout_handler)
-        aresponses.add("192.168.1.100", Endpoint.STATUS, "GET", _timeout_handler)
+        aresponses.add(
+            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _timeout_handler
+        )
+        aresponses.add(
+            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _timeout_handler
+        )
+        aresponses.add(
+            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _timeout_handler
+        )
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
@@ -1642,7 +1671,7 @@ class TestConnection:
             await response.write(b': "ok"}')
             return response
 
-        aresponses.add("192.168.1.100", Endpoint.STATUS, "GET", handler)
+        aresponses.add("192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, handler)
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
@@ -1677,12 +1706,12 @@ class TestConnection:
     @pytest.mark.parametrize(
         ("method", "uri"),
         [
-            pytest.param("GET", Endpoint.STATUS, id="poll"),
-            pytest.param("POST", Endpoint.SPA_MANAGER, id="command"),
+            pytest.param(HTTPMethod.GET, Endpoint.STATUS, id="poll"),
+            pytest.param(HTTPMethod.POST, Endpoint.SPA_MANAGER, id="command"),
         ],
     )
     async def test_request_sends_connection_close(
-        self, aresponses: ResponsesMockServer, method: str, uri: str
+        self, aresponses: ResponsesMockServer, method: HTTPMethod, uri: str
     ) -> None:
         """Test every request asks the HNA to close the socket afterwards."""
         received: list[str | None] = []
@@ -1739,7 +1768,9 @@ class TestConnection:
         self, aresponses: ResponsesMockServer
     ) -> None:
         """Test a timeout names the elapsed request timeout in its message."""
-        aresponses.add("192.168.1.100", Endpoint.STATUS, "GET", _timeout_handler)
+        aresponses.add(
+            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _timeout_handler
+        )
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
                 host="192.168.1.100", session=session, request_timeout=0.1
@@ -1759,7 +1790,7 @@ class TestConnection:
         aresponses.add(
             "192.168.1.100",
             Endpoint.STATUS,
-            "GET",
+            HTTPMethod.GET,
             _json_response("spa_connect_status.json"),
         )
         caplog.set_level(logging.DEBUG, logger="hotspring")
@@ -1773,7 +1804,9 @@ class TestConnection:
         self, aresponses: ResponsesMockServer, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test a timed-out attempt logs its URI and elapsed time."""
-        aresponses.add("192.168.1.100", Endpoint.STATUS, "GET", _timeout_handler)
+        aresponses.add(
+            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _timeout_handler
+        )
         caplog.set_level(logging.DEBUG, logger="hotspring")
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
@@ -1814,16 +1847,22 @@ class TestConnection:
     ) -> None:
         """Test fallback spa_connected=True when /status succeeds."""
         host = "192.168.1.100"
-        aresponses.add(host, Endpoint.STATUS, "GET", _json_response("status.json"))
-        aresponses.add(host, Endpoint.STARTUP, "GET", _json_response("startup.json"))
+        aresponses.add(
+            host, Endpoint.STATUS, HTTPMethod.GET, _json_response("status.json")
+        )
+        aresponses.add(
+            host, Endpoint.STARTUP, HTTPMethod.GET, _json_response("startup.json")
+        )
         # /spaConnectStatus returns 500 error (transient failure)
         aresponses.add(
             host,
             Endpoint.SPA_CONNECT_STATUS,
-            "GET",
+            HTTPMethod.GET,
             Response(status=500, text="Internal Server Error"),
         )
-        aresponses.add(host, Endpoint.SPA_MODEL, "GET", _json_response("spamodel.json"))
+        aresponses.add(
+            host, Endpoint.SPA_MODEL, HTTPMethod.GET, _json_response("spamodel.json")
+        )
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host=host, session=session)
@@ -1831,11 +1870,13 @@ class TestConnection:
             assert spa.connection_status.spa_connected is True
 
             # And on routine update when /spaConnectStatus fails
-            aresponses.add(host, Endpoint.STATUS, "GET", _json_response("status.json"))
+            aresponses.add(
+                host, Endpoint.STATUS, HTTPMethod.GET, _json_response("status.json")
+            )
             aresponses.add(
                 host,
                 Endpoint.SPA_CONNECT_STATUS,
-                "GET",
+                HTTPMethod.GET,
                 Response(status=500, text="Internal Server Error"),
             )
             spa = await client.update()
@@ -1884,7 +1925,7 @@ class _RecordingHotSpring(HotSpring):
     async def request(
         self,
         uri: str = "",
-        method: str = "GET",  # noqa: ARG002
+        method: str = HTTPMethod.GET,  # noqa: ARG002
         data: dict[str, object] | None = None,  # noqa: ARG002
     ) -> dict[str, object]:
         """Record the URI and return the matching fixture."""
