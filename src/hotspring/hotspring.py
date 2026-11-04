@@ -468,7 +468,9 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             HotSpringNotReadyError: If the SNA bridge is not connected.
-            HotSpringCommandError: If the command fails.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         if self.spa is not None and not self.spa.connection_status.spa_connected:
@@ -485,8 +487,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             if self.spa is not None:
                 with _parsing("/spaManager"):
                     self.spa.update_from_dict(response_data)
+        except HotSpringConnectionError:
+            raise
         except HotSpringError as exception:
-            msg = f"Command failed: {payload}"
+            msg = f"Command failed: {payload}: {exception}"
             raise HotSpringCommandError(msg) from exception
 
     async def set_temperature(self, temperature: float) -> None:
@@ -496,6 +500,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ----
             temperature: Target temperature in the spa's configured unit
                 (Fahrenheit or Celsius). Supports integer or half-degree float values.
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         await self._send_command(
@@ -510,6 +521,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             mode: The heating mode value. Use HeatingMode enum values or string,
                 e.g. ``HeatingMode.HEAT_WITH_BOOST.value`` or ``"heatWithBoost"``.
 
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
+
         """
         mode_val = mode.value if isinstance(mode, HeatingMode) else str(mode)
         await self._send_command({"heater": {"control": {"heatingMode": mode_val}}})
@@ -522,6 +540,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             jet: The jet number (1-based).
             speed: The speed value. Use JetSpeed enum values or string,
                 e.g. ``JetSpeed.HIGH_SPEED.value`` or ``"highSpeed"``.
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         speed_val = speed.value if isinstance(speed, JetSpeed) else str(speed)
@@ -539,6 +564,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             zone: The light zone number (1-based).
             color: The color value. Use LightColor enum values or string,
                 e.g. ``LightColor.BLUE.value`` or ``"BLUE"``.
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         color_val = color.value if isinstance(color, LightColor) else str(color)
@@ -562,6 +594,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Args:
         ----
             zone: The light zone number (1-based).
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         await self._send_command(
@@ -589,6 +628,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If brightness is not an integer between 0 and 5.
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         if not 0 <= brightness <= 5:
@@ -622,6 +665,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             mode: The light wheel mode. Use LightWheelMode enum values or string,
                 e.g. ``LightWheelMode.ON.value``, ``"loopUp"``,
                 ``"loopDown"``, or ``"off"``. Defaults to LightWheelMode.ON.
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         mode_val = mode.value if isinstance(mode, LightWheelMode) else str(mode)
@@ -658,6 +708,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If any RGB component is not between 0 and 255.
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         for component in (red, green, blue):
@@ -693,6 +747,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ----
             enabled: True to enable, False to disable.
 
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
+
         """
         value = "on" if enabled else "off"
         await self._send_command({"cleanCycle": {"control": {"cleanCycle": value}}})
@@ -703,6 +764,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Args:
         ----
             on: True to turn on, False to turn off.
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         value = "on" if on else "off"
@@ -715,6 +783,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ----
             locked: True to lock, False to unlock.
 
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
+
         """
         value = "on" if locked else "off"
         await self._send_command({"spaLock": {"control": value}})
@@ -725,6 +800,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Args:
         ----
             locked: True to lock, False to unlock.
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         value = "on" if locked else "off"
@@ -741,6 +823,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ----
             enabled: True to enable, False to disable.
 
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
+
         """
         value = "on" if enabled else "off"
         await self._send_command({"cleanCycle": {"control": {"vanishingAct": value}}})
@@ -752,6 +841,13 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ----
             The underlying ESP32 firmware endpoint only supports toggling
             the boost state via ``{"waterCare": {"control": {"boost": "toggle"}}}``.
+
+        Raises:
+        ------
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         await self._send_command({"waterCare": {"control": {"boost": "toggle"}}})
@@ -770,6 +866,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If level is not an integer between 0 and 10.
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         if not 0 <= level <= 10:
@@ -793,6 +893,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If neither power_a nor power_b is specified.
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         cfg: dict[str, object] = {}
@@ -816,6 +920,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If the brightness level is unrecognized.
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         brightness = (
@@ -855,6 +963,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If schedule_id or time/duration parameters are invalid.
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         if schedule_id not in VALID_ENERGY_SAVING_SCHEDULE_IDS:
@@ -909,6 +1021,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Raises:
         ------
             ValueError: If time parameters are out of range.
+            HotSpringNotReadyError: If the SNA bridge is not connected.
+            HotSpringConnectionTimeoutError: If the command times out.
+            HotSpringConnectionError: If the HNA cannot be reached.
+            HotSpringCommandError: If the command fails for any other reason.
 
         """
         if not 0 <= start_hour <= 23:

@@ -7,7 +7,7 @@ This repository contains `python-hotspring`, a standalone asynchronous Python cl
 - **First line**: Short, specific imperative sentence (e.g. "Fix FreshWaterIQ installed detection and normalize sentinel readings"). No emojis in titles.
 - **Commit & PR description**: Focus on the **WHY** (problem, context, and architectural rationale). Do not merely narrate the diff or use boilerplate section headings. Keep it concise, factual, and proportional.
 - **Do NOT amend, squash, or rebase commits that have already been pushed to the PR branch after the PR is opened**: Reviewers need to follow the commit history and see what changed since their last review.
-- **Pull Request Labels**: Every PR **must** have **exactly one** label from `.github/workflows/pr-labels.yaml` (`breaking-change`, `new-feature`, `bugfix`, `enhancement`, `refactor`, `performance`, `maintenance`, `ci`, `documentation`, `dependencies`, `chore`). Pass `--label <label>` when creating a PR via `gh pr create` (see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-labels)).
+- **Pull Request Labels**: Every PR **must** have **exactly one** label from `.github/workflows/pr-labels.yaml` (`breaking-change`, `new-feature`, `bugfix`, `enhancement`, `maintenance`, `documentation`, `dependencies`). Labels are applied automatically by `.github/labeler.yml` based on branch prefix or changed file paths (see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-labels)).
 
 ## Development Commands
 

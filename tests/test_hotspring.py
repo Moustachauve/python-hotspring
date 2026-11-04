@@ -54,6 +54,12 @@ def _json_response(fixture_name: str, status: int = 200) -> Response:
     )
 
 
+async def _timeout_handler(_: aiohttp.web.Request) -> Response:
+    """Simulate a slow endpoint that exceeds request_timeout."""
+    await asyncio.sleep(0.2)
+    return Response(text="timeout")
+
+
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def _add_update_mocks(  # noqa: PLR0913
     aresponses: ResponsesMockServer,
@@ -1492,22 +1498,97 @@ class TestCommands:  # pylint: disable=too-many-public-methods
                 await client.set_temperature(102)
             assert client.spa.heater.set_temperature == initial_temp
 
+    @pytest.mark.parametrize(
+        ("response", "expected_cause"),
+        [
+            pytest.param(
+                Response(status=500, text="error"),
+                "(500, {'message': 'error'})",
+                id="http_error",
+            ),
+            pytest.param(
+                Response(status=200, text="not json"),
+                "Invalid JSON response from /spaManager: not json",
+                id="invalid_json",
+            ),
+        ],
+    )
+    async def test_command_error_message_includes_cause(
+        self,
+        aresponses: ResponsesMockServer,
+        response: Response,
+        expected_cause: str,
+    ) -> None:
+        """Test a rejected command names the underlying error and chains it."""
+        aresponses.add("192.168.1.100", "/spaManager", "POST", response)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            with pytest.raises(HotSpringCommandError) as exc_info:
+                await client.set_temperature(102)
+
+        assert str(exc_info.value) == (
+            "Command failed: {'heater': {'control': {'temperatureABS': '102'}}}: "
+            f"{expected_cause}"
+        )
+        assert isinstance(exc_info.value.__cause__, HotSpringError)
+        assert not isinstance(exc_info.value, HotSpringConnectionError)
+
+    async def test_command_timeout_propagates(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test a command timeout surfaces as a timeout, not a command error."""
+        aresponses.add("192.168.1.100", "/spaManager", "POST", _timeout_handler)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(
+                host="192.168.1.100", session=session, request_timeout=0.1
+            )
+            with pytest.raises(HotSpringConnectionTimeoutError) as exc_info:
+                await client.set_temperature(102)
+
+        assert not isinstance(exc_info.value, HotSpringCommandError)
+
+    async def test_command_connection_error_propagates(self) -> None:
+        """Test an unreachable HNA surfaces as a connection error."""
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            with (
+                patch.object(
+                    session,
+                    "request",
+                    side_effect=aiohttp.ClientConnectionError("Connection refused"),
+                ),
+                pytest.raises(HotSpringConnectionError) as exc_info,
+            ):
+                await client.set_temperature(102)
+
+        assert exc_info.type is HotSpringConnectionError
+        assert isinstance(exc_info.value.__cause__, aiohttp.ClientConnectionError)
+
+    async def test_command_sna_not_connected_is_not_wrapped(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test the SNA readiness check still raises only HotSpringNotReadyError."""
+        disconnected = json.dumps({"spaConnectStatus": "false"})
+        _add_update_mocks(aresponses, connect_payload=disconnected)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            with pytest.raises(HotSpringNotReadyError) as exc_info:
+                await client.set_temperature(102)
+
+        assert exc_info.type is HotSpringNotReadyError
+        assert exc_info.value.__cause__ is None
+
 
 class TestConnection:
     """Tests for connection handling."""
-
-    @staticmethod
-    async def _timeout_handler(_: aiohttp.web.Request) -> Response:
-        """Simulate a slow endpoint that exceeds request_timeout."""
-        await asyncio.sleep(0.2)
-        return Response(text="timeout")
 
     async def test_connection_error_no_retries(
         self, aresponses: ResponsesMockServer
     ) -> None:
         """Test that with default request_retries=0, failure is immediate."""
         # Fails on the very first attempt without retrying
-        aresponses.add("192.168.1.100", "/status", "GET", self._timeout_handler)
+        aresponses.add("192.168.1.100", "/status", "GET", _timeout_handler)
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
@@ -1522,9 +1603,9 @@ class TestConnection:
     ) -> None:
         """Test connection error retries when request_retries is configured."""
         # Backoff retries request_retries + 1 = 3 times
-        aresponses.add("192.168.1.100", "/status", "GET", self._timeout_handler)
-        aresponses.add("192.168.1.100", "/status", "GET", self._timeout_handler)
-        aresponses.add("192.168.1.100", "/status", "GET", self._timeout_handler)
+        aresponses.add("192.168.1.100", "/status", "GET", _timeout_handler)
+        aresponses.add("192.168.1.100", "/status", "GET", _timeout_handler)
+        aresponses.add("192.168.1.100", "/status", "GET", _timeout_handler)
 
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
@@ -1654,7 +1735,7 @@ class TestConnection:
         self, aresponses: ResponsesMockServer
     ) -> None:
         """Test a timeout names the elapsed request timeout in its message."""
-        aresponses.add("192.168.1.100", "/status", "GET", self._timeout_handler)
+        aresponses.add("192.168.1.100", "/status", "GET", _timeout_handler)
         async with aiohttp.ClientSession() as session:
             client = HotSpring(
                 host="192.168.1.100", session=session, request_timeout=0.1
@@ -1685,7 +1766,7 @@ class TestConnection:
         self, aresponses: ResponsesMockServer, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test a timed-out attempt logs its URI and elapsed time."""
-        aresponses.add("192.168.1.100", "/status", "GET", self._timeout_handler)
+        aresponses.add("192.168.1.100", "/status", "GET", _timeout_handler)
         caplog.set_level(logging.DEBUG, logger="hotspring")
         async with aiohttp.ClientSession() as session:
             client = HotSpring(

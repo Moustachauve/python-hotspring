@@ -2,7 +2,7 @@
 name: PR Labels
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - reopened
@@ -10,12 +10,25 @@ on:
       - labeled
       - unlabeled
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   pr-labels:
     name: PR Labels
     runs-on: ubuntu-latest
     steps:
-      - name: 🚀 Run Labeler
+      - name: 🏷️ Auto-label PR
+        if: >-
+          (github.event.action == 'opened' || github.event.action == 'reopened')
+          && github.event.pull_request.labels.length == 0
+        uses: actions/labeler@v7
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: false
+
+      - name: 🚀 Verify Required Label
         uses: mheap/github-action-required-labels@v5
         with:
           mode: exactly
@@ -23,12 +36,8 @@ jobs:
           labels: >
             breaking-change,
             bugfix,
-            chore,
-            ci,
             dependencies,
             documentation,
             enhancement,
             maintenance,
-            new-feature,
-            performance,
-            refactor
+            new-feature
