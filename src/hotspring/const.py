@@ -2,7 +2,23 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, StrEnum
+
+
+class Endpoint(StrEnum):
+    """HTTP path served by the Home Network Adapter (HNA).
+
+    Each member's value is the request path, so members can be passed anywhere
+    a plain ``str`` URI is accepted.
+    """
+
+    STATUS = "/status"
+    STARTUP = "/startup"
+    SPA_MODEL = "/spamodel"
+    SPA_CONNECT_STATUS = "/spaConnectStatus"
+    FRESHWATER_IQ = "/getFWIQData"
+    DEBUG_DATA = "/addDebugData"
+    SPA_MANAGER = "/spaManager"
 
 
 class HeatingMode(Enum):

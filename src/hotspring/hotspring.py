@@ -8,6 +8,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from http import HTTPMethod
 from typing import TYPE_CHECKING, Self
 
 import aiohttp
@@ -17,6 +18,7 @@ from .const import (
     _BRIGHTNESS_TO_WIRE,
     VALID_ENERGY_SAVING_SCHEDULE_IDS,
     BrightnessLevel,
+    Endpoint,
     HeatingMode,
     JetSpeed,
     LightColor,
@@ -39,7 +41,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
     async def request(
         self,
         uri: str = "",
-        method: str = "GET",
+        method: HTTPMethod | str = HTTPMethod.GET,
         data: dict[str, object] | None = None,
     ) -> dict[str, object]:
         """Handle a request to the Hot Spring HNA.
@@ -102,7 +104,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         Args:
         ----
             uri: Request URI, for example ``/status``.
-            method: HTTP method to use for the request.
+            method: HTTP method (``HTTPMethod`` or its string value).
             data: Dictionary of data to send to the HNA.
 
         Returns:
@@ -220,11 +222,31 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 )
                 return response_data
 
-    async def _safe_request(self, uri: str) -> dict[str, object] | None:
+    async def _safe_request(self, endpoint: Endpoint) -> dict[str, object] | None:
         """Fetch an endpoint, returning None on error."""
         with contextlib.suppress(HotSpringError):
-            return await self.request(uri)
+            return await self.request(endpoint)
         return None
+
+    async def _fetch[T](
+        self,
+        endpoint: Endpoint,
+        parse: Callable[[dict[str, object]], T],
+        *,
+        method: HTTPMethod | str = HTTPMethod.GET,
+        data: dict[str, object] | None = None,
+    ) -> T:
+        """Request an endpoint and parse its response, naming it on bad data.
+
+        Raises
+        ------
+            HotSpringError: If the request fails or ``parse`` rejects the
+                payload as malformed (attributed to ``endpoint``).
+
+        """
+        response = await self.request(endpoint, method=method, data=data)
+        with _parsing(endpoint):
+            return parse(response)
 
     async def update(self, *, refresh_identity: bool = False) -> Spa:
         """Get all spa information.
@@ -255,27 +277,27 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
         """
         if not self._identity_loaded or refresh_identity:
-            status_res = await self.request("/status")
-            startup_res = await self._safe_request("/startup")
-            connect_res = await self._safe_request("/spaConnectStatus")
-            model_res = await self._safe_request("/spamodel")
+            status_res = await self.request(Endpoint.STATUS)
+            startup_res = await self._safe_request(Endpoint.STARTUP)
+            connect_res = await self._safe_request(Endpoint.SPA_CONNECT_STATUS)
+            model_res = await self._safe_request(Endpoint.SPA_MODEL)
 
-            with _parsing("/status"):
+            with _parsing(Endpoint.STATUS):
                 if self.spa is None:
                     self.spa = Spa(status_res)
                 else:
                     self.spa.update_from_dict(status_res)
 
             if startup_res:
-                with _parsing("/startup"):
+                with _parsing(Endpoint.STARTUP):
                     self.spa.update_info(startup_res)
 
             if model_res:
-                with _parsing("/spamodel"):
+                with _parsing(Endpoint.SPA_MODEL):
                     self.spa.update_info(model_res)
 
             if connect_res:
-                with _parsing("/spaConnectStatus"):
+                with _parsing(Endpoint.SPA_CONNECT_STATUS):
                     self.spa.update_connection_status(connect_res)
             elif (
                 self.spa.connection_status
@@ -295,17 +317,17 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             self._identity_loaded = True
             return self.spa
 
-        status_res = await self.request("/status")
-        connect_res = await self._safe_request("/spaConnectStatus")
+        status_res = await self.request(Endpoint.STATUS)
+        connect_res = await self._safe_request(Endpoint.SPA_CONNECT_STATUS)
 
-        with _parsing("/status"):
+        with _parsing(Endpoint.STATUS):
             if self.spa is None:  # Safety guard; spa is always set after cold sync
                 self.spa = Spa(status_res)
             else:
                 self.spa.update_from_dict(status_res)
 
         if connect_res:
-            with _parsing("/spaConnectStatus"):
+            with _parsing(Endpoint.SPA_CONNECT_STATUS):
                 self.spa.update_connection_status(connect_res)
         elif (
             self.spa.connection_status and not self.spa.connection_status.spa_connected
@@ -331,9 +353,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             HotSpringError: If the response is invalid.
 
         """
-        data = await self.request("/startup")
-        with _parsing("/startup"):
-            return SpaInfo.from_dict(data)
+        return await self._fetch(Endpoint.STARTUP, SpaInfo.from_dict)
 
     async def update_identity(self) -> SpaInfo:
         """Fetch and update static spa identity info (/startup and /spamodel).
@@ -353,8 +373,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             msg = "Call update() before update_identity()"
             raise HotSpringError(msg)
 
-        startup_res = await self._safe_request("/startup")
-        model_res = await self._safe_request("/spamodel")
+        startup_res = await self._safe_request(Endpoint.STARTUP)
+        model_res = await self._safe_request(Endpoint.SPA_MODEL)
 
         identity_data: dict[str, object] = {}
         if startup_res:
@@ -363,7 +383,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             identity_data.update(model_res)
 
         if identity_data:
-            with _parsing("/startup and /spamodel"):
+            with _parsing(f"{Endpoint.STARTUP} and {Endpoint.SPA_MODEL}"):
                 self.spa.update_info(identity_data)
 
         if self.validate_device and not self.spa.is_hna:
@@ -393,15 +413,15 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             HotSpringError: If no data is returned.
 
         """
-        data = await self.request("/getFWIQData")
 
-        if self.spa is None:
-            msg = "Call update() before update_water_care()"
-            raise HotSpringError(msg)
-
-        with _parsing("/getFWIQData"):
+        def parse(data: dict[str, object]) -> FreshWaterIQ:
+            if self.spa is None:
+                msg = "Call update() before update_water_care()"
+                raise HotSpringError(msg)
             self.spa.update_freshwater_iq(data)
-        return self.spa.freshwater_iq
+            return self.spa.freshwater_iq
+
+        return await self._fetch(Endpoint.FRESHWATER_IQ, parse)
 
     async def update_diagnostics(self) -> Diagnostics:
         """Update diagnostic and power metrics.
@@ -418,15 +438,15 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             HotSpringError: If no data is returned.
 
         """
-        data = await self.request("/addDebugData")
 
-        if self.spa is None:
-            msg = "Call update() before update_diagnostics()"
-            raise HotSpringError(msg)
-
-        with _parsing("/addDebugData"):
+        def parse(data: dict[str, object]) -> Diagnostics:
+            if self.spa is None:
+                msg = "Call update() before update_diagnostics()"
+                raise HotSpringError(msg)
             self.spa.update_diagnostics(data)
-        return self.spa.diagnostics
+            return self.spa.diagnostics
+
+        return await self._fetch(Endpoint.DEBUG_DATA, parse)
 
     async def update_connection_status(self) -> ConnectionStatus:
         """Update HNA/SNA/cloud connection status.
@@ -440,15 +460,20 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             HotSpringError: If no data is returned.
 
         """
-        data = await self.request("/spaConnectStatus")
 
-        if self.spa is None:
-            msg = "Call update() before update_connection_status()"
-            raise HotSpringError(msg)
-
-        with _parsing("/spaConnectStatus"):
+        def parse(data: dict[str, object]) -> ConnectionStatus:
+            if self.spa is None:
+                msg = "Call update() before update_connection_status()"
+                raise HotSpringError(msg)
             self.spa.update_connection_status(data)
-        return self.spa.connection_status
+            return self.spa.connection_status
+
+        return await self._fetch(Endpoint.SPA_CONNECT_STATUS, parse)
+
+    def _apply_command_response(self, response: dict[str, object]) -> None:
+        """Fold a command's echoed state into the spa, if one is loaded."""
+        if self.spa is not None:
+            self.spa.update_from_dict(response)
 
     async def _send_command(self, payload: dict[str, object]) -> None:
         """Send a control command to the spa via POST /spaManager.
@@ -481,12 +506,12 @@ class HotSpring:  # pylint: disable=too-many-public-methods
             raise HotSpringNotReadyError(msg)
 
         try:
-            response_data = await self.request(
-                "/spaManager", method="POST", data=payload
+            await self._fetch(
+                Endpoint.SPA_MANAGER,
+                self._apply_command_response,
+                method=HTTPMethod.POST,
+                data=payload,
             )
-            if self.spa is not None:
-                with _parsing("/spaManager"):
-                    self.spa.update_from_dict(response_data)
         except HotSpringConnectionError:
             raise
         except HotSpringError as exception:
