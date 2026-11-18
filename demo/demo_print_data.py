@@ -43,11 +43,9 @@ def print_heater_and_jets(s: Spa) -> None:
     print(f"Current Temp: {s.heater.current_temperature} {unit}")
     print(f"Set Temp:     {s.heater.set_temperature} {unit}")
     print(f"Heating Mode: {s.heater.heating_mode.value}")
-    print(
-        f"Heater Hours: {s.heater.heater_on_hours:.2f} hrs ({s.heater.heater_on_seconds} s)"
-    )
     print(f"Heater Lock:  {s.heater.heater_lock}")
     print(f"Heat Pump:    {s.heater.heatpump_installed}")
+    print(f"System Uptime: {s.system_uptime_hours} hrs ({s.system_uptime_seconds} s)")
 
     print("\n" + "=" * 20)
     print("  JETS & BLOWER")
@@ -57,14 +55,24 @@ def print_heater_and_jets(s: Spa) -> None:
         extra = ""
         if jet.concurrent_mode:
             extra += " Concurrent=True"
+        runtime = (
+            f"{jet.on_hours:.2f}h ({jet.on_seconds}s)"
+            if jet.on_hours is not None
+            else "N/A"
+        )
         print(
             f"Jet {jet.jet_id:1}: Available={jet.is_available!s:5} "
             f"SpeedType={jet.speed_type.value:11} State={jet.speed.value:10} "
-            f"Supported=[{supported}] Runtime={jet.on_hours:.2f}h ({jet.on_seconds}s){extra}"
+            f"Supported=[{supported}] Runtime={runtime}{extra}"
         )
+    blower_runtime = (
+        f"{s.blower.on_hours:.2f}h ({s.blower.on_seconds}s)"
+        if s.blower.on_hours is not None
+        else "N/A"
+    )
     print(
         f"Blower: Status={'ON' if s.blower.is_on else 'OFF':3} "
-        f"Enabled={s.blower.is_enabled}"
+        f"Enabled={s.blower.is_enabled} Runtime={blower_runtime}"
     )
 
 
@@ -104,26 +112,41 @@ def print_lighting_and_watercare(s: Spa) -> None:
 
 
 def print_diagnostics(s: Spa) -> None:
-    """Print diagnostics info."""
+    """Print power and diagnostics info."""
+    print("\n" + "=" * 20)
+    print("  POWER & CURRENT")
+    print("=" * 20)
+    print(f"Supported:      {s.power.supported}")
+    print(f"Total Power:    {s.power.total_power} VA/W")
+    print(
+        f"Small Loads:    {s.power.small_loads_power} W ({s.power.small_loads_current} A)"
+    )
+    print(
+        f"J1+J2+Blower:   {s.power.jet1_jet2_blower_power} VA "
+        f"({s.power.jet1_jet2_blower_current} A)"
+    )
+    print(f"Heater:         {s.power.heater_power} W ({s.power.heater_current} A)")
+    print(f"Jet 3:          {s.power.jet3_power} VA ({s.power.jet3_current} A)")
+
     print("\n" + "=" * 20)
     print("  DIAGNOSTICS (DEBUG)")
     print("=" * 20)
     print(f"Failure State:  {s.diagnostics.spa_failure_state.value}")
-    print(f"L1 Volts:       {s.diagnostics.l1_n_volts:.1f} V")
-    print(f"L2 Volts:       {s.diagnostics.l2_n_volts:.1f} V")
-    print(f"Heater Volts:   {s.diagnostics.heater_volts:.1f} V")
-    print(f"Jet 3 Volts:    {s.diagnostics.jet3_volts:.1f} V")
-    print(f"Frequency:      {s.diagnostics.power_frequency} Hz")
+    print(f"L2 >= 256V:     {s.diagnostics.l2_voltage_above_256v}")
+    print(f"Jet 3 Volts:    {s.diagnostics.jet3_volts} V")
+    print(
+        f"Filter 1 / 2:   {s.diagnostics.filter_1_minutes} / {s.diagnostics.filter_2_minutes} min"
+    )
+    print(f"Frequency Flag: {s.diagnostics.power_frequency}")
     print(f"Circ Flow:      {s.diagnostics.circulation_pump_flow_status}")
     print(f"Pressure Switch: {s.diagnostics.pressure_switch_status}")
 
     print("\n" + "=" * 20)
-    print("  RAW TEST METRICS")
+    print("  CALIBRATION METRICS")
     print("=" * 20)
-    print(f"Heater Current: {s.test_metrics.heater_current:.2f} A")
-    print(f"Jet 3 Current:  {s.test_metrics.jet3_current:.2f} A")
-    print(f"Small Loads:    {s.test_metrics.small_loads_current:.2f} A")
-    print(f"J1+J2+Blower:   {s.test_metrics.jet1_jet2_blower_current:.2f} A")
+    print(f"Heater Test:    {s.test_metrics.heater_test_status}")
+    print(f"Temp Offset:    {s.test_metrics.temp_offset}")
+    print(f"Vsense Cal:     {s.test_metrics.vsense_cal}")
 
     print("\n" + "=" * 20)
     print("  VERSIONS")

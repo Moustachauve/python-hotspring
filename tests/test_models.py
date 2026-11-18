@@ -30,6 +30,7 @@ from hotspring.models import (
     Jet,
     LightZone,
     LogoLight,
+    PowerMetrics,
     Spa,
     SpaInfo,
     SpaLock,
@@ -216,7 +217,7 @@ class TestJet:
         assert jets[3].jet_id == 3
 
     def test_jet3_concurrent_and_current(self, snapshot: SnapshotAssertion) -> None:
-        """Test parsing Jet 3 concurrent mode and electrical current."""
+        """Test parsing Jet 3 concurrent mode and single-speed configuration."""
         jet = Jet.from_dict(
             3,
             {
@@ -226,20 +227,6 @@ class TestJet:
         )
         assert jet == snapshot
 
-    def test_jet_negative_runtime_overflow(self) -> None:
-        """Test graceful handling of negative signed integer overflow in runtime."""
-        jet = Jet.from_dict(
-            1,
-            {
-                "config": {"speed": "dualSpeed"},
-                "status": {"speed": "off", "jet_1_ON_sec": -1568323328},
-            },
-        )
-        assert jet.on_seconds == 10650953
-        assert jet.on_hours == 2958.6
-        assert jet.is_on is False
-        assert jet.speed_type == JetSpeedType.DUAL_SPEED
-
     def test_jet_properties(self) -> None:
         """Test computed properties on Jet."""
         dual_jet = Jet(
@@ -247,7 +234,6 @@ class TestJet:
             speed=JetSpeed.HIGH_SPEED,
             speed_type=JetSpeedType.DUAL_SPEED,
             is_enabled=True,
-            current=10.4,
             on_seconds=7200,
         )
         assert dual_jet.is_available is True
@@ -271,6 +257,7 @@ class TestJet:
         assert single_jet.is_on is False
         assert single_jet.is_dual_speed is False
         assert single_jet.is_single_speed is True
+        assert single_jet.on_hours is None
         assert single_jet.supported_speeds == [JetSpeed.OFF, JetSpeed.HIGH_SPEED]
 
         disabled_jet = Jet(
@@ -299,6 +286,11 @@ class TestBlower:
             {"config": {"blower": "enable"}, "status": {"blower": "on"}}
         )
         assert blower == snapshot
+
+    def test_on_hours_property(self) -> None:
+        """Test blower on_hours returns None until runtime is populated."""
+        assert Blower().on_hours is None
+        assert Blower(on_seconds=5400).on_hours == 1.5
 
 
 class TestLightZone:
@@ -654,45 +646,75 @@ class TestDiagnostics:
 
     def test_from_empty_dict(self) -> None:
         """Test parsing diagnostics from empty dict uses defaults."""
-        diag = Diagnostics.from_dict({})
-        assert diag.spa_failure_state == SpaFailureState.UNKNOWN
-        assert diag.heater_power == "0"
+        assert Diagnostics.from_dict({}) == Diagnostics()
 
-    def test_from_invalid_dict(self) -> None:
-        """Test parsing diagnostics with invalid/null nested objects."""
-        invalid_cases: list[dict[str, object]] = [
-            {"debugData": None},
-            {"debugData": "invalid"},
-            {"debugData": {"status": None}},
-            {"debugData": {"status": "invalid"}},
-            {"debugData": {"status": {}}},
-        ]
-        for invalid_data in invalid_cases:
-            diag = Diagnostics.from_dict(invalid_data)
-            assert diag.spa_failure_state == SpaFailureState.UNKNOWN
-            assert diag.heater_power == "0"
+    @pytest.mark.parametrize(
+        "invalid_data",
+        [
+            pytest.param({"debugData": None}, id="null_debug_data"),
+            pytest.param({"debugData": "invalid"}, id="string_debug_data"),
+            pytest.param({"debugData": {"status": None}}, id="null_status"),
+            pytest.param({"debugData": {"status": "invalid"}}, id="string_status"),
+            pytest.param({"debugData": {"status": {}}}, id="empty_status"),
+        ],
+    )
+    def test_from_invalid_dict(self, invalid_data: dict[str, object]) -> None:
+        """Test parsing diagnostics with invalid or empty nested objects."""
+        assert Diagnostics.from_dict(invalid_data) == Diagnostics()
 
-    def test_voltages_and_extended_keys(self) -> None:
-        """Test voltage computed properties and extended diagnostic keys."""
+    def test_pre_sync_all_zero_normalizes_decoded_fields_to_none(self) -> None:
+        """Test real pre-sync /addDebugData (Spa_Ok with all zeros) returns defaults."""
+        data: dict[str, object] = {
+            "debugData": {
+                "status": {
+                    "spaFailureState": "Spa_Ok",
+                    "heaterError": "0",
+                    "powerFrequency": "0",
+                    "pressureSwitchStatus": "0",
+                    "circulationPumpFlowStatus": "0",
+                    "regulationThermistorTempStatus": "0",
+                    "limitThermistorStatus": "0",
+                    "L1_N_Volts": "0",
+                    "L2_N_Volts": "0",
+                    "Heater_Volts": "0",
+                    "jet3_Volts": "0",
+                    "jet1_jet2_blowerPower": "0",
+                    "smallLoadsPower": "0",
+                    "heaterPower": "0",
+                    "jet3Power": "0",
+                }
+            }
+        }
+        assert Diagnostics.from_dict(data) == Diagnostics()
+
+    def test_decoded_voltage_clean_cycle_and_filter_times(self) -> None:
+        """Test decoding shifted voltage, clean-cycle, and filter fields."""
         data: dict[str, object] = {
             "debugData": {
                 "status": {
                     "spaFailureState": "Spa_Ok",
                     "circulationPumpFlowStatus": "1",
-                    "regulationThermistorTempStatus": "2",
-                    "limitThermistorStatus": "3",
-                    "L1_N_Volts": "3840",
-                    "L2_N_Volts": "3584",
-                    "jet3_Volts": "3840",
+                    "regulationThermistorTempStatus": "1",
+                    "limitThermistorStatus": "1",
+                    "L1_N_Volts": "61441",
+                    "L2_N_Volts": "1792",
+                    "smallLoadsPower": "256",
+                    "heaterPower": "90",
+                    "jet3Power": "45",
                 }
             }
         }
-        diag = Diagnostics.from_dict(data)
-        assert diag.circulation_pump_flow_status == "1"
-        assert diag.regulation_thermistor_temp_status == "2"
-        assert diag.limit_thermistor_status == "3"
-        assert diag.l1_n_volts == 120.0
-        assert diag.l2_n_volts == 112.0
+        assert Diagnostics.from_dict(data) == Diagnostics(
+            spa_failure_state=SpaFailureState.OK,
+            circulation_pump_flow_status="1",
+            regulation_thermistor_temp_status="1",
+            limit_thermistor_status="1",
+            l2_voltage_above_256v=True,
+            jet3_volts=240,
+            daily_clean_cycle=1,
+            filter_1_minutes=90,
+            filter_2_minutes=45,
+        )
 
 
 class TestSpaTestData:
@@ -707,8 +729,338 @@ class TestSpaTestData:
 
     def test_from_empty_dict(self) -> None:
         """Test parsing test data from empty dict uses defaults."""
-        test_metrics = SpaTestData.from_dict({})
-        assert test_metrics.small_loads_current == 0.0
+        assert SpaTestData.from_dict({}) == SpaTestData()
+
+    def test_calibration_fields_preserved_on_partial_update(self) -> None:
+        """Test partial SpaTestData update preserves existing calibration values."""
+        existing = SpaTestData(
+            heater_test_status="on", temp_offset=0.5, vsense_cal=-1.2
+        )
+        updated = SpaTestData.from_dict(
+            {"status": {"heaterTestStatus": "off"}}, existing=existing
+        )
+        assert updated == SpaTestData(
+            heater_test_status="off", temp_offset=0.5, vsense_cal=-1.2
+        )
+
+
+def _power_status(
+    words: tuple[int, int, int, int] = (0, 0, 0, 0),
+    *,
+    heater: str = "off",
+    jet1: str = "off",
+    jet2: str = "off",
+    jet3: str | None = None,
+) -> dict[str, object]:
+    """Build a minimal /status payload for power reconstruction tests."""
+    j12b_cur, sl_cur, h_cur, j3_cur = words
+    jets: dict[str, object] = {
+        "JET1": {"status": {"speed": jet1}},
+        "JET2": {"status": {"speed": jet2}},
+    }
+    if jet3 is not None:
+        jets["JET3"] = {"config": {"JET3": "enable"}, "status": {"speed": jet3}}
+    return {
+        "heater": {"status": {"heater": heater}},
+        "JET": jets,
+        "test_data": {
+            "status": {
+                "jet1+jet2+blowerCurrent": j12b_cur,
+                "smallLoadsCurrent": sl_cur,
+                "heaterCurrent": h_cur,
+                "jet3Current": j3_cur,
+            }
+        },
+    }
+
+
+def _power_debug(
+    *,
+    l2_raw: int = 0,
+    hv_raw: int = 0,
+    j3v_raw: int = 0,
+    j12p_raw: int = 0,
+    slp_raw: int = 0,
+) -> dict[str, object]:
+    """Build a minimal synced /addDebugData payload for power reconstruction tests."""
+    return {
+        "debugData": {
+            "status": {
+                "spaFailureState": "Spa_Ok",
+                "pressureSwitchStatus": "1",
+                "L2_N_Volts": str(l2_raw),
+                "Heater_Volts": str(hv_raw),
+                "jet3_Volts": str(j3v_raw),
+                "jet1_jet2_blowerPower": str(j12p_raw),
+                "smallLoadsPower": str(slp_raw),
+            }
+        }
+    }
+
+
+class TestPowerMetrics:
+    """Tests for reconstructed PowerMetrics across /status and /addDebugData."""
+
+    def test_idle_power_from_status_alone(self) -> None:
+        """Test idle total_power is resolved from /status without /addDebugData."""
+        spa = Spa(_power_status((0, 0, 16128, 0)))
+        assert spa.power == PowerMetrics(
+            supported=True,
+            small_loads_power=63,
+            jet1_jet2_blower_power=0,
+            heater_power=0,
+            jet3_power=0,
+            jet1_jet2_blower_current=0,
+            small_loads_current=None,
+            heater_current=0,
+            jet3_current=0,
+        )
+        assert spa.power.total_power == 63
+
+    @pytest.mark.parametrize(
+        ("status_data", "debug_data", "expected", "expected_total"),
+        [
+            pytest.param(
+                _power_status((0, 2048, 18434, 0), jet1="lowSpeed"),
+                _power_debug(l2_raw=256),
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=72,
+                    jet1_jet2_blower_power=520,
+                    heater_power=0,
+                    jet3_power=0,
+                    jet1_jet2_blower_current=1,
+                    small_loads_current=0,
+                    heater_current=0,
+                    jet3_current=0,
+                ),
+                592,
+                id="jet1_low",
+            ),
+            pytest.param(
+                _power_status((0, 6912, 18439, 0), jet1="highSpeed"),
+                _power_debug(l2_raw=1536),
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=72,
+                    jet1_jet2_blower_power=1819,
+                    heater_power=0,
+                    jet3_power=0,
+                    jet1_jet2_blower_current=6,
+                    small_loads_current=0,
+                    heater_current=0,
+                    jet3_current=0,
+                ),
+                1891,
+                id="jet1_high",
+            ),
+            pytest.param(
+                _power_status((0, 512, 15624, 0), jet2="highSpeed"),
+                _power_debug(l2_raw=1792),
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=61,
+                    jet1_jet2_blower_power=2050,
+                    heater_power=0,
+                    jet3_power=0,
+                    jet1_jet2_blower_current=7,
+                    small_loads_current=0,
+                    heater_current=0,
+                    jet3_current=0,
+                ),
+                2111,
+                id="jet2_high",
+            ),
+            pytest.param(
+                _power_status((0, 7680, 15631, 0), jet1="highSpeed", jet2="highSpeed"),
+                _power_debug(l2_raw=3584),
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=61,
+                    jet1_jet2_blower_power=3870,
+                    heater_power=0,
+                    jet3_power=0,
+                    jet1_jet2_blower_current=14,
+                    small_loads_current=0,
+                    heater_current=0,
+                    jet3_current=0,
+                ),
+                3931,
+                id="both_jets_high",
+            ),
+            pytest.param(
+                _power_status((0, 0, 16128, 30208), heater="on"),
+                _power_debug(j3v_raw=3840, j12p_raw=15),
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=63,
+                    jet1_jet2_blower_power=0,
+                    heater_power=3958,
+                    jet3_power=0,
+                    jet1_jet2_blower_current=0,
+                    small_loads_current=0,
+                    heater_current=15,
+                    jet3_current=0,
+                ),
+                4021,
+                id="heater_only",
+            ),
+            pytest.param(
+                _power_status((0, 3584, 18183, 16128), heater="on", jet1="highSpeed"),
+                _power_debug(l2_raw=1792, j3v_raw=3840, j12p_raw=15),
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=71,
+                    jet1_jet2_blower_power=1806,
+                    heater_power=3903,
+                    jet3_power=0,
+                    jet1_jet2_blower_current=7,
+                    small_loads_current=0,
+                    heater_current=15,
+                    jet3_current=0,
+                ),
+                5780,
+                id="heater_plus_jet1_high",
+            ),
+            pytest.param(
+                _power_status((2048, 0, 17920, 0), jet3="highSpeed"),
+                _power_debug(j12p_raw=51200, slp_raw=7),
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=70,
+                    jet1_jet2_blower_power=0,
+                    heater_power=0,
+                    jet3_power=1992,
+                    jet1_jet2_blower_current=0,
+                    small_loads_current=0,
+                    heater_current=0,
+                    jet3_current=8,
+                ),
+                2062,
+                id="jet3_active",
+            ),
+        ],
+    )
+    def test_reconstructed_load_states(
+        self,
+        status_data: dict[str, object],
+        debug_data: dict[str, object],
+        expected: PowerMetrics,
+        expected_total: int,
+    ) -> None:
+        """Test byte-reconstructed power and current across real spa load states."""
+        spa = Spa(status_data)
+        spa.update_diagnostics(debug_data)
+        assert spa.power == expected
+        assert spa.power.total_power == expected_total
+
+    @pytest.mark.parametrize(
+        "status_data",
+        [
+            pytest.param({}, id="empty"),
+            pytest.param(_power_status(heater="on"), id="non_ct_board"),
+        ],
+    )
+    def test_unsupported_or_pre_sync_returns_empty_power_metrics(
+        self, status_data: dict[str, object]
+    ) -> None:
+        """Test boards without current sensors return unsupported PowerMetrics."""
+        spa = Spa(status_data)
+        assert spa.power == PowerMetrics()
+        assert spa.power.total_power is None
+        assert spa.needs_diagnostics_for_power is False
+
+    def test_heating_without_debug_data_keeps_heater_power_none(self) -> None:
+        """Test heater_power is None until /addDebugData arrives during heating."""
+        spa = Spa(_power_status((0, 0, 16128, 30208), heater="on"))
+        assert spa.needs_diagnostics_for_power is True
+        assert spa.power.heater_power is None
+        assert spa.power.total_power is None
+
+    def test_preserves_heater_power_without_byte_tearing_until_next_debug_poll(
+        self,
+    ) -> None:
+        """Test a new /status poll mid-heating does not tear stale high/low bytes."""
+        spa = Spa(_power_status((0, 55552, 17929, 53248), heater="on", jet1="lowSpeed"))
+        spa.update_diagnostics(_power_debug(j3v_raw=3584, j12p_raw=14))
+        assert spa.power.heater_power == 3792
+
+        # Next /status poll crosses 3840 W boundary (low byte 208 -> 20)
+        # before /addDebugData arrives; must keep 3792 instead of tearing to 3604.
+        spa.update_from_dict(_power_status((0, 0, 18944, 5120), heater="on"))
+        assert spa.power.heater_power == 3792
+
+        # Once the paired /addDebugData arrives with high byte 15, updates to 3860 W.
+        spa.update_diagnostics(_power_debug(j3v_raw=3840, j12p_raw=15))
+        assert spa.power.heater_power == 3860
+        assert spa.power.total_power == 3934
+
+    def test_heater_turning_off_immediately_zeroes_heater_power(self) -> None:
+        """Test heater turning off sets heater_power=0 without needing /addDebugData."""
+        spa = Spa(_power_status((0, 0, 16128, 30208), heater="on"))
+        spa.update_diagnostics(_power_debug(j3v_raw=3840, j12p_raw=15))
+        assert spa.power.heater_power == 3958
+
+        spa.update_from_dict({"heater": {"status": {"heater": "off"}}})
+        assert spa.needs_diagnostics_for_power is False
+        assert spa.power.heater_power == 0
+        assert spa.power.heater_current == 0
+        assert spa.power.total_power == 63
+
+    def test_partial_jet_echo_updates_power_without_stale_debug_words(self) -> None:
+        """Test partial jet command echoes reset power/current without stale bytes."""
+        spa = Spa(_power_status((0, 0, 16128, 30208), heater="on"))
+        spa.update_diagnostics(_power_debug(j3v_raw=3840, j12p_raw=15))
+        assert spa.power.total_power == 4021
+
+        spa.update_from_dict({"JET": {"JET1": {"control": "highSpeed"}}})
+        assert spa.power.jet1_jet2_blower_power is None
+        assert spa.power.jet1_jet2_blower_current is None
+        assert spa.power.total_power is None
+
+        spa.update_from_dict({"JET": {"JET1": {"control": "off"}}})
+        assert spa.power.jet1_jet2_blower_power == 0
+        assert spa.power.jet1_jet2_blower_current == 0
+        assert spa.power.total_power == 4021
+
+    def test_standalone_heater_current_echo_does_not_tear_pump_power(self) -> None:
+        """Test standalone heaterCurrent in partial payload does not tear pump power."""
+        spa = Spa(_power_status((0, 6912, 18439, 0), jet1="highSpeed"))
+        assert spa.power.jet1_jet2_blower_power == 1819
+
+        spa.update_from_dict(
+            {"heater": {"status": {"heater": "off", "heaterCurrent": 16128}}}
+        )
+        assert spa.power.small_loads_power == 72
+        assert spa.power.jet1_jet2_blower_power == 1819
+
+    def test_unsynced_debug_data_preserves_existing_active_heater_power(self) -> None:
+        """Test empty/pre-sync /addDebugData while heating preserves heater_power."""
+        spa = Spa(_power_status((0, 0, 16128, 30208), heater="on"))
+        spa.update_diagnostics(_power_debug(j3v_raw=3840, j12p_raw=15))
+        assert spa.power.heater_power == 3958
+
+        spa.update_diagnostics({})
+        assert spa.power.heater_power == 3958
+
+    def test_j12b_subload_change_invalidates_unpolled_metrics(self) -> None:
+        """Test changing pump speed/combination invalidates stale power and current."""
+        spa = Spa(
+            _power_status((0, 7680, 15631, 0), jet1="highSpeed", jet2="highSpeed")
+        )
+        spa.update_diagnostics(_power_debug(l2_raw=3584))
+        assert spa.power.jet1_jet2_blower_power == 3870
+        assert spa.power.jet1_jet2_blower_current == 14
+
+        # Partial command echo changing Jet 1 speed without test_data clears stale power
+        spa.update_from_dict({"JET": {"JET1": {"control": "lowSpeed"}}})
+        assert spa.power.jet1_jet2_blower_power is None
+        assert spa.power.jet1_jet2_blower_current is None
+
+        # Routine /status poll updates VA while clearing stale 14 A current
+        spa.update_from_dict(_power_status((0, 2048, 18434, 0), jet1="lowSpeed"))
+        assert spa.power.jet1_jet2_blower_power == 520
+        assert spa.power.jet1_jet2_blower_current is None
 
 
 class TestSpaInfo:
@@ -1105,6 +1457,8 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert "test_metrics" in updated
         assert "energy_savings" in updated
         assert "versions" in updated
+        assert "power" in updated
+        assert "system_uptime_seconds" in updated
 
     def test_update_from_dict_non_dict_section(
         self, status_response: dict[str, object]
@@ -1133,7 +1487,7 @@ class TestSpa:  # pylint: disable=too-many-public-methods
             "blower": {"config": {"blower": "enable"}, "status": {"blower": "on"}},
         }
         updated = spa.update_from_dict(payload)
-        assert updated == {"heater", "blower"}
+        assert updated == {"heater", "blower", "power"}
         assert spa.heater.is_on is False
         assert spa.blower.is_on is True
 
@@ -1272,6 +1626,7 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert len(spa.jets) == 3
         assert spa.jets[1].speed == JetSpeed.HIGH_SPEED
         initial_on_seconds = spa.jets[1].on_seconds
+        assert initial_on_seconds is not None
         assert initial_on_seconds > 0
 
         # Simulate a command response updating JET1 to off
@@ -1286,7 +1641,7 @@ class TestSpa:  # pylint: disable=too-many-public-methods
             }
         }
         updated = spa.update_from_dict(partial_payload)
-        assert updated == {"jets"}
+        assert updated == {"jets", "power"}
 
         assert len(spa.jets) == 3
         assert spa.jets[1].speed == JetSpeed.OFF
@@ -1294,6 +1649,46 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert spa.jets[1].on_seconds == initial_on_seconds
         assert spa.jets[2].jet_id == 2
         assert spa.jets[3].jet_id == 3
+
+    def test_shifted_runtime_routing_and_signed_overflow(self) -> None:
+        """Test shifted runtime routing across sections and signed 32-bit overflow."""
+        spa = Spa(
+            {
+                "heater": {"status": {"heater": "off", "heaterHours": 60475904}},
+                "JET": {
+                    "JET1": {"status": {"speed": "off", "jet_1_ON_sec": -1345838592}},
+                    "JET2": {"status": {"speed": "off", "jet_2_ON_sec": 921600}},
+                    "JET3": {"status": {"speed": "off", "jet_3_ON_sec": 460800}},
+                },
+                "blower": {"config": {"blower": "enable"}, "status": {"blower": "off"}},
+            }
+        )
+        assert spa.system_uptime_seconds == 11520034
+        assert spa.system_uptime_hours == 3200.01
+        assert spa.jets[1].on_seconds == 236234
+        assert spa.jets[2].on_seconds is None
+        assert spa.jets[3].on_seconds == 3600
+        assert spa.blower.on_seconds == 1800
+
+    def test_pre_sync_all_zero_runtimes_stay_none(self) -> None:
+        """Test pre-sync all-zero runtime counters remain None."""
+        spa = Spa(
+            {
+                "heater": {"status": {"heater": "off", "heaterHours": 0}},
+                "JET": {
+                    "JET1": {"status": {"speed": "off", "jet_1_ON_sec": 0}},
+                    "JET2": {"status": {"speed": "off", "jet_2_ON_sec": 0}},
+                    "JET3": {"status": {"speed": "off", "jet_3_ON_sec": 0}},
+                },
+                "blower": {"status": {"blower": "disable"}},
+            }
+        )
+        assert spa.system_uptime_seconds is None
+        assert spa.system_uptime_hours is None
+        assert spa.jets[1].on_seconds is None
+        assert spa.jets[2].on_seconds is None
+        assert spa.jets[3].on_seconds is None
+        assert spa.blower.on_seconds is None
 
     def test_partial_update_versions(self, status_response: dict[str, object]) -> None:
         """Test updating product versions partially retains cached fields."""

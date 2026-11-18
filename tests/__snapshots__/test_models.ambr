@@ -3,12 +3,14 @@
   Blower(
     is_enabled=False,
     is_on=False,
+    on_seconds=None,
   )
 # ---
 # name: TestBlower.test_from_dict_enabled_on
   Blower(
     is_enabled=True,
     is_on=True,
+    on_seconds=None,
   )
 # ---
 # name: TestCleanCycle.test_from_dict
@@ -28,19 +30,16 @@
 # name: TestDiagnostics.test_from_dict
   Diagnostics(
     circulation_pump_flow_status='0',
+    daily_clean_cycle=0,
+    filter_1_minutes=60,
+    filter_2_minutes=30,
     heater_error='0',
-    heater_power='60',
-    heater_volts=0.0,
-    jet1_jet2_blower_power='14',
-    jet3_power='30',
-    jet3_volts=112.0,
-    l1_n_volts=0.0,
-    l2_n_volts=120.0,
+    jet3_volts=0,
+    l2_voltage_above_256v=False,
     limit_thermistor_status='0',
     power_frequency='0',
     pressure_switch_status='1',
     regulation_thermistor_temp_status='0',
-    small_loads_power='0',
     spa_failure_state=<SpaFailureState.OK: 'Spa_Ok'>,
   )
 # ---
@@ -121,9 +120,7 @@
 # name: TestHeater.test_from_dict
   Heater(
     current_temperature=100.0,
-    heater_current=7.5,
     heater_lock=False,
-    heater_on_seconds=52046,
     heating_mode=<HeatingMode.UNKNOWN: 'unknown'>,
     heatpump_installed=False,
     is_on=True,
@@ -135,28 +132,25 @@
   dict({
     1: Jet(
       concurrent_mode=False,
-      current=0.0,
       is_enabled=True,
       jet_id=1,
-      on_seconds=1061668,
+      on_seconds=None,
       speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
       speed_type=<JetSpeedType.DUAL_SPEED: 'dualSpeed'>,
     ),
     2: Jet(
       concurrent_mode=False,
-      current=0.0,
       is_enabled=True,
       jet_id=2,
-      on_seconds=0,
+      on_seconds=None,
       speed=<JetSpeed.OFF: 'off'>,
       speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
     ),
     3: Jet(
       concurrent_mode=False,
-      current=0.0,
       is_enabled=False,
       jet_id=3,
-      on_seconds=0,
+      on_seconds=None,
       speed=<JetSpeed.OFF: 'off'>,
       speed_type=<JetSpeedType.UNKNOWN: 'unknown'>,
     ),
@@ -165,10 +159,9 @@
 # name: TestJet.test_jet3_concurrent_and_current
   Jet(
     concurrent_mode=True,
-    current=3.6,
     is_enabled=True,
     jet_id=3,
-    on_seconds=2,
+    on_seconds=None,
     speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
     speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
   )
@@ -254,6 +247,7 @@
     blower=Blower(
       is_enabled=False,
       is_on=False,
+      on_seconds=0,
     ),
     clean_cycle=CleanCycle(
       clean_timer_enabled=False,
@@ -268,19 +262,16 @@
     device_type=<DeviceType.UNKNOWN: 'unknown'>,
     diagnostics=Diagnostics(
       circulation_pump_flow_status='0',
+      daily_clean_cycle=None,
+      filter_1_minutes=None,
+      filter_2_minutes=None,
       heater_error='0',
-      heater_power='0',
-      heater_volts=0.0,
-      jet1_jet2_blower_power='0',
-      jet3_power='0',
-      jet3_volts=0.0,
-      l1_n_volts=0.0,
-      l2_n_volts=0.0,
+      jet3_volts=None,
+      l2_voltage_above_256v=None,
       limit_thermistor_status='0',
       power_frequency='0',
       pressure_switch_status='0',
       regulation_thermistor_temp_status='0',
-      small_loads_power='0',
       spa_failure_state=<SpaFailureState.UNKNOWN: 'unknown'>,
     ),
     energy_savings=dict({
@@ -313,9 +304,7 @@
     ),
     heater=Heater(
       current_temperature=100.0,
-      heater_current=7.5,
       heater_lock=False,
-      heater_on_seconds=52046,
       heating_mode=<HeatingMode.UNKNOWN: 'unknown'>,
       heatpump_installed=False,
       is_on=True,
@@ -339,25 +328,22 @@
     jets=dict({
       1: Jet(
         concurrent_mode=False,
-        current=0.0,
         is_enabled=True,
         jet_id=1,
-        on_seconds=1061668,
+        on_seconds=52046,
         speed=<JetSpeed.HIGH_SPEED: 'highSpeed'>,
         speed_type=<JetSpeedType.DUAL_SPEED: 'dualSpeed'>,
       ),
       2: Jet(
         concurrent_mode=False,
-        current=0.0,
         is_enabled=True,
         jet_id=2,
-        on_seconds=0,
+        on_seconds=None,
         speed=<JetSpeed.OFF: 'off'>,
         speed_type=<JetSpeedType.SINGLE_SPEED: 'singleSpeed'>,
       ),
       3: Jet(
         concurrent_mode=False,
-        current=0.0,
         is_enabled=False,
         jet_id=3,
         on_seconds=0,
@@ -422,15 +408,25 @@
     logo_light=LogoLight(
       brightness=<BrightnessLevel.LEVEL_2: 'brightness_level_2'>,
     ),
+    needs_diagnostics_for_power=True,
+    power=PowerMetrics(
+      heater_current=None,
+      heater_power=None,
+      jet1_jet2_blower_current=None,
+      jet1_jet2_blower_power=0,
+      jet3_current=0,
+      jet3_power=0,
+      small_loads_current=None,
+      small_loads_power=75,
+      supported=True,
+    ),
     spa_lock=SpaLock(
       is_locked=False,
     ),
+    system_uptime_hours=294.91,
+    system_uptime_seconds=1061668,
     test_metrics=SpaTestData(
-      heater_current=7.5,
       heater_test_status='off',
-      jet1_jet2_blower_current=0.0,
-      jet3_current=0.0,
-      small_loads_current=0.0,
       temp_offset=0.0,
       vsense_cal=0.0,
     ),
@@ -482,11 +478,7 @@
 # ---
 # name: TestSpaTestData.test_from_dict
   SpaTestData(
-    heater_current=7.5,
     heater_test_status='off',
-    jet1_jet2_blower_current=0.0,
-    jet3_current=0.0,
-    small_loads_current=0.0,
     temp_offset=0.0,
     vsense_cal=0.0,
   )
