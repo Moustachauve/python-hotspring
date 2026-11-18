@@ -71,6 +71,7 @@ def _add_update_mocks(  # noqa: PLR0913
     startup_fixture: str = "startup.json",
     connect_payload: str | None = None,
     spamodel_status: int = 200,
+    debug_status: int | None = 200,
 ) -> None:
     """Add mock responses for a full update() call."""
     host = "192.168.1.100"
@@ -100,6 +101,13 @@ def _add_update_mocks(  # noqa: PLR0913
         HTTPMethod.GET,
         _json_response("spamodel.json", status=spamodel_status),
     )
+    if debug_status is not None and status_fixture == "status.json":
+        aresponses.add(
+            host,
+            Endpoint.DEBUG_DATA,
+            HTTPMethod.GET,
+            _json_response("debug_data.json", status=debug_status),
+        )
 
 
 class TestUpdate:
@@ -570,7 +578,7 @@ class TestUpdateWaterCare:
 
 
 class TestUpdateDiagnostics:
-    """Tests for the update_diagnostics() method."""
+    """Tests for update_diagnostics() and opportunistic /addDebugData polling."""
 
     async def test_update_diagnostics(
         self, aresponses: ResponsesMockServer, snapshot: SnapshotAssertion
@@ -589,6 +597,148 @@ class TestUpdateDiagnostics:
             diag = await client.update_diagnostics()
 
         assert diag == snapshot
+
+    @pytest.mark.parametrize(
+        ("heater_state", "heater_current", "expected_supported", "expected_total"),
+        [
+            pytest.param("off", 19200, True, 75, id="heater_and_jet3_off"),
+            pytest.param("on", 0, False, None, id="power_unsupported"),
+        ],
+    )
+    async def test_update_skips_debug_data_when_not_needed(
+        self,
+        aresponses: ResponsesMockServer,
+        heater_state: str,
+        heater_current: int,
+        expected_supported: bool,
+        expected_total: int | None,
+    ) -> None:
+        """Test update() skips /addDebugData when no active load needs it."""
+        host = "192.168.1.100"
+        status = json.loads(_load("status.json"))
+        status["heater"]["status"]["heater"] = heater_state
+        status["heater"]["status"]["heaterCurrent"] = heater_current
+        status["test_data"]["status"]["heaterCurrent"] = heater_current
+
+        async def fail_if_called(_: aiohttp.web.Request) -> Response:
+            pytest.fail("/addDebugData should not be requested")
+
+        aresponses.add(host, Endpoint.STATUS, HTTPMethod.GET, _raw_json(status))
+        aresponses.add(
+            host, Endpoint.STARTUP, HTTPMethod.GET, _json_response("startup.json")
+        )
+        aresponses.add(
+            host,
+            Endpoint.SPA_CONNECT_STATUS,
+            HTTPMethod.GET,
+            _json_response("spa_connect_status.json"),
+        )
+        aresponses.add(
+            host, Endpoint.SPA_MODEL, HTTPMethod.GET, _json_response("spamodel.json")
+        )
+        aresponses.add(host, Endpoint.DEBUG_DATA, HTTPMethod.GET, fail_if_called)
+
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host=host, session=session)
+            spa = await client.update()
+
+        assert spa.power.supported is expected_supported
+        assert spa.power.total_power == expected_total
+
+    async def test_update_fetches_debug_data_when_jet3_on_and_heater_off(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test update() fetches /addDebugData when Jet 3 is running with heater off."""
+        host = "192.168.1.100"
+        status = json.loads(_load("status.json"))
+        status["heater"]["status"]["heater"] = "off"
+        status["JET"]["JET3"]["config"]["JET3"] = "enable"
+        status["JET"]["JET3"]["status"]["speed"] = "highSpeed"
+        status["test_data"]["status"]["jet1+jet2+blowerCurrent"] = 2048
+
+        aresponses.add(host, Endpoint.STATUS, HTTPMethod.GET, _raw_json(status))
+        aresponses.add(
+            host, Endpoint.STARTUP, HTTPMethod.GET, _json_response("startup.json")
+        )
+        aresponses.add(
+            host,
+            Endpoint.SPA_CONNECT_STATUS,
+            HTTPMethod.GET,
+            _json_response("spa_connect_status.json"),
+        )
+        aresponses.add(
+            host, Endpoint.SPA_MODEL, HTTPMethod.GET, _json_response("spamodel.json")
+        )
+        aresponses.add(
+            host,
+            Endpoint.DEBUG_DATA,
+            HTTPMethod.GET,
+            _raw_json(
+                {
+                    "debugData": {
+                        "status": {
+                            "spaFailureState": "Spa_Ok",
+                            "jet1_jet2_blowerPower": "51200",
+                            "smallLoadsPower": "7",
+                        }
+                    }
+                }
+            ),
+        )
+
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host=host, session=session)
+            spa = await client.update()
+
+        assert spa.power.jet3_current == 8
+        assert spa.power.jet3_power == 1992
+        assert spa.power.total_power == 2067
+
+    async def test_update_debug_data_failure_is_non_critical(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test /addDebugData HTTP error during update() does not fail update()."""
+        _add_update_mocks(aresponses, debug_status=500)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+
+        assert spa.power.supported is True
+        assert spa.power.small_loads_power == 75
+        assert spa.power.heater_power is None
+
+    async def test_routine_poll_fetches_debug_data_when_heating(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test routine update() fetches /addDebugData to populate heater_power."""
+        _add_update_mocks(aresponses, debug_status=500)
+        aresponses.add(
+            "192.168.1.100",
+            Endpoint.STATUS,
+            HTTPMethod.GET,
+            _json_response("status.json"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            Endpoint.SPA_CONNECT_STATUS,
+            HTTPMethod.GET,
+            _json_response("spa_connect_status.json"),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            Endpoint.DEBUG_DATA,
+            HTTPMethod.GET,
+            _json_response("debug_data.json"),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+            assert spa.power.heater_power is None
+
+            spa = await client.update()
+
+        assert spa.power.heater_power == 3584
+        assert spa.power.total_power == 3659
 
 
 def _raw_json(payload: object) -> Response:
