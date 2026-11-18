@@ -45,7 +45,12 @@ def print_heater_and_jets(s: Spa) -> None:
     print(f"Heating Mode: {s.heater.heating_mode.value}")
     print(f"Heater Lock:  {s.heater.heater_lock}")
     print(f"Heat Pump:    {s.heater.heatpump_installed}")
-    print(f"System Uptime: {s.system_uptime_hours} hrs ({s.system_uptime_seconds} s)")
+    uptime = (
+        f"{s.system_uptime_hours:.2f} hrs ({s.system_uptime_seconds} s)"
+        if s.system_uptime_hours is not None
+        else "N/A"
+    )
+    print(f"System Uptime: {uptime}")
 
     print("\n" + "=" * 20)
     print("  JETS & BLOWER")

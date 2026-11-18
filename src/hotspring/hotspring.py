@@ -259,8 +259,8 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         On subsequent routine polling cycles, it queries /status and /spaConnectStatus
         sequentially, avoiding redundant radio (LoRA) queries for static identity data
         while keeping telemetry and connection status fresh. When power monitoring is
-        supported and active loads (such as the heater or Jet 3) require /addDebugData
-        to complete power reconstruction, it is also fetched opportunistically.
+        supported and /addDebugData is needed for initial baseline current or active
+        loads, it is also fetched opportunistically.
 
         Args:
         ----
@@ -341,7 +341,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         return self.spa
 
     async def _refresh_power_diagnostics(self) -> None:
-        """Fetch /addDebugData when active loads require it for power metrics."""
+        """Fetch /addDebugData when needed for baseline current or active loads."""
         if (
             self.spa is not None
             and self.spa.connection_status.spa_connected
@@ -349,7 +349,10 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ):
             debug_response = await self._safe_request(Endpoint.DEBUG_DATA)
             if debug_response:
-                with _parsing(Endpoint.DEBUG_DATA):
+                with (
+                    contextlib.suppress(HotSpringError),
+                    _parsing(Endpoint.DEBUG_DATA),
+                ):
                     self.spa.update_diagnostics(debug_response)
 
     async def get_device_info(self) -> SpaInfo:

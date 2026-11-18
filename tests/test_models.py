@@ -810,7 +810,16 @@ class TestPowerMetrics:
         [
             pytest.param({}, False, id="empty"),
             pytest.param(_power_status(heater="on"), False, id="unsupported_board"),
-            pytest.param(_power_status((0, 0, 16128, 0)), False, id="idle_supported"),
+            pytest.param(
+                _power_status((0, 0, 16128, 0)),
+                True,
+                id="idle_awaiting_baseline_debug",
+            ),
+            pytest.param(
+                _power_status((0, 6912, 18439, 0), jet1="highSpeed"),
+                True,
+                id="jet1_awaiting_debug",
+            ),
             pytest.param(
                 _power_status((0, 0, 16128, 30208), heater="on"),
                 True,
@@ -835,31 +844,42 @@ class TestPowerMetrics:
         assert (spa.power, spa.power.total_power) == snapshot
 
     @pytest.mark.parametrize(
-        ("status_data", "debug_data"),
+        ("status_data", "debug_data", "expected_needs_diagnostics"),
         [
+            pytest.param(
+                _power_status((0, 0, 16128, 0)),
+                _power_debug(),
+                False,
+                id="idle_synced",
+            ),
             pytest.param(
                 _power_status((0, 2048, 18434, 0), jet1="lowSpeed"),
                 _power_debug(l2_volts=256),
+                True,
                 id="jet1_low",
             ),
             pytest.param(
                 _power_status((0, 7680, 15631, 0), jet1="highSpeed", jet2="highSpeed"),
                 _power_debug(l2_volts=3584),
+                True,
                 id="both_jets_high",
             ),
             pytest.param(
                 _power_status((0, 0, 16128, 30208), heater="on"),
                 _power_debug(jet3_volts=3840, jet1_jet2_blower_power=15),
+                True,
                 id="heater_only",
             ),
             pytest.param(
                 _power_status((0, 3584, 18183, 16128), heater="on", jet1="highSpeed"),
                 _power_debug(l2_volts=1792, jet3_volts=3840, jet1_jet2_blower_power=15),
+                True,
                 id="heater_and_jet1_high",
             ),
             pytest.param(
                 _power_status((2048, 0, 17920, 0), jet3="highSpeed"),
                 _power_debug(jet1_jet2_blower_power=51200, small_loads_power=7),
+                True,
                 id="jet3_active",
             ),
         ],
@@ -868,11 +888,13 @@ class TestPowerMetrics:
         self,
         status_data: dict[str, object],
         debug_data: dict[str, object],
+        expected_needs_diagnostics: bool,
         snapshot: SnapshotAssertion,
     ) -> None:
         """Test byte-reconstructed power and current across active spa circuits."""
         spa = Spa(status_data)
         spa.update_diagnostics(debug_data)
+        assert spa.needs_diagnostics_for_power is expected_needs_diagnostics
         assert (spa.power, spa.power.total_power) == snapshot
 
     @pytest.mark.parametrize(
@@ -928,6 +950,25 @@ class TestPowerMetrics:
 
         spa.update_diagnostics({})
         assert (spa.power, spa.diagnostics) == expected
+
+    def test_heater_echo_before_status_prevents_stale_debug_pairing(self) -> None:
+        """Test heater-on echo without test_data blocks stale low-byte pairing."""
+        spa = Spa(_power_status((0, 0, 16128, 0), heater="off"))
+        spa.update_from_dict({"heater": {"status": {"heater": "on"}}})
+        spa.update_diagnostics(_power_debug(jet3_volts=3840, jet1_jet2_blower_power=15))
+
+        assert spa.power.small_loads_current == 0
+        assert spa.power.heater_power is None
+        assert spa.power.heater_current is None
+
+    def test_consecutive_debug_updates_do_not_repair_stale_status(self) -> None:
+        """Test repeat /addDebugData calls without /status preserve heater power."""
+        spa = Spa(_power_status((0, 0, 16128, 30208), heater="on"))
+        spa.update_diagnostics(_power_debug(jet3_volts=3840, jet1_jet2_blower_power=14))
+        expected = spa.power
+
+        spa.update_diagnostics(_power_debug(jet3_volts=3840, jet1_jet2_blower_power=15))
+        assert spa.power == expected
 
 
 class TestSpaInfo:
