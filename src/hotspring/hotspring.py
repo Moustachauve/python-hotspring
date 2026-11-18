@@ -342,11 +342,15 @@ class HotSpring:  # pylint: disable=too-many-public-methods
 
     async def _refresh_power_diagnostics(self) -> None:
         """Fetch /addDebugData when active loads require it for power metrics."""
-        if self.spa is not None and self.spa.needs_diagnostics_for_power:
-            debug_res = await self._safe_request(Endpoint.DEBUG_DATA)
-            if debug_res:
+        if (
+            self.spa is not None
+            and self.spa.connection_status.spa_connected
+            and self.spa.needs_diagnostics_for_power
+        ):
+            debug_response = await self._safe_request(Endpoint.DEBUG_DATA)
+            if debug_response:
                 with _parsing(Endpoint.DEBUG_DATA):
-                    self.spa.update_diagnostics(debug_res)
+                    self.spa.update_diagnostics(debug_response)
 
     async def get_device_info(self) -> SpaInfo:
         """Fetch lightweight device identity directly from /startup.
