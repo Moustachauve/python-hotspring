@@ -81,7 +81,6 @@ def _add_update_mocks(  # noqa: PLR0913
     startup_fixture: str = "startup.json",
     connect_payload: str | None = None,
     spamodel_status: int = 200,
-    debug_status: int | None = 200,
     debug_response: Response | None = None,
 ) -> None:
     """Add mock responses for a full update() call."""
@@ -115,17 +114,12 @@ def _add_update_mocks(  # noqa: PLR0913
         HTTPMethod.GET,
         _json_response("spamodel.json", status=spamodel_status),
     )
-    if debug_response is not None:
-        aresponses.add(host, Endpoint.DEBUG_DATA, HTTPMethod.GET, debug_response)
-    elif debug_status is not None and (
-        status_payload is not None or status_fixture == "status.json"
-    ):
-        aresponses.add(
-            host,
-            Endpoint.DEBUG_DATA,
-            HTTPMethod.GET,
-            _json_response("debug_data.json", status=debug_status),
-        )
+    aresponses.add(
+        host,
+        Endpoint.DEBUG_DATA,
+        HTTPMethod.GET,
+        debug_response or _json_response("debug_data.json"),
+    )
 
 
 class TestUpdate:
@@ -640,7 +634,6 @@ class TestUpdateDiagnostics:
             aresponses,
             status_payload=status,
             connect_payload=connect_payload,
-            debug_status=None,
         )
 
         async with aiohttp.ClientSession() as session:
@@ -652,37 +645,6 @@ class TestUpdateDiagnostics:
         assert Endpoint.DEBUG_DATA not in [
             entry.request.path for entry in aresponses.history
         ]
-
-    async def test_routine_idle_poll_skips_debug_data_after_baseline(
-        self, aresponses: ResponsesMockServer
-    ) -> None:
-        """Test idle update() fetches /addDebugData once and skips further polls."""
-        idle_status = json.loads(_load("status.json"))
-        idle_status["heater"]["status"]["heater"] = "off"
-        idle_status["JET"]["JET1"]["status"]["speed"] = "off"
-
-        _add_update_mocks(aresponses, status_payload=idle_status)
-        aresponses.add(
-            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _raw_json(idle_status)
-        )
-        aresponses.add(
-            "192.168.1.100",
-            Endpoint.SPA_CONNECT_STATUS,
-            HTTPMethod.GET,
-            _json_response("spa_connect_status.json"),
-        )
-
-        async with aiohttp.ClientSession() as session:
-            client = HotSpring(host="192.168.1.100", session=session)
-            spa = await client.update()
-            assert spa.power.small_loads_current == 0
-            spa = await client.update()
-
-        assert spa.power.small_loads_current == 0
-        assert spa.power.total_power == 75
-        assert [entry.request.path for entry in aresponses.history].count(
-            Endpoint.DEBUG_DATA
-        ) == 1
 
     @pytest.mark.parametrize(
         "debug_response",
@@ -703,44 +665,38 @@ class TestUpdateDiagnostics:
             client = HotSpring(host="192.168.1.100", session=session)
             spa = await client.update()
 
-        # pylint: disable=protected-access
-        assert client._identity_loaded is True
         assert spa.power.supported is True
         assert spa.power.small_loads_power == 75
         assert spa.power.heater_power is None
 
     @pytest.mark.parametrize(
-        (
-            "heater_state",
-            "jet1_speed",
-            "expected_heater_power",
-            "expected_pump_current",
-        ),
+        ("heater_state", "jet1_speed", "expected_debug_calls", "expected_values"),
         [
-            pytest.param("on", "off", 3584, 0, id="heater_on"),
-            pytest.param("off", "highSpeed", 0, 15, id="jet1_high_heater_off"),
+            pytest.param("off", "off", 1, (0, 0), id="idle_skips_after_baseline"),
+            pytest.param("on", "off", 2, (3584, 0), id="heater_on"),
+            pytest.param("off", "highSpeed", 2, (0, 15), id="jet1_high_heater_off"),
         ],
     )
-    async def test_routine_poll_fetches_debug_data_when_load_active(
+    async def test_routine_poll_debug_data_behavior(
         self,
         aresponses: ResponsesMockServer,
         heater_state: str,
         jet1_speed: str,
-        expected_heater_power: int,
-        expected_pump_current: int,
+        expected_debug_calls: int,
+        expected_values: tuple[int, int],
     ) -> None:
-        """Test routine update() fetches /addDebugData when heater or pump runs."""
+        """Test routine poll skips /addDebugData while idle and fetches when active."""
         idle_status = json.loads(_load("status.json"))
         idle_status["heater"]["status"]["heater"] = "off"
         idle_status["JET"]["JET1"]["status"]["speed"] = "off"
 
-        active_status = json.loads(_load("status.json"))
-        active_status["heater"]["status"]["heater"] = heater_state
-        active_status["JET"]["JET1"]["status"]["speed"] = jet1_speed
+        next_status = json.loads(_load("status.json"))
+        next_status["heater"]["status"]["heater"] = heater_state
+        next_status["JET"]["JET1"]["status"]["speed"] = jet1_speed
 
         _add_update_mocks(aresponses, status_payload=idle_status)
         aresponses.add(
-            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _raw_json(active_status)
+            "192.168.1.100", Endpoint.STATUS, HTTPMethod.GET, _raw_json(next_status)
         )
         aresponses.add(
             "192.168.1.100",
@@ -754,14 +710,19 @@ class TestUpdateDiagnostics:
             HTTPMethod.GET,
             _json_response("debug_data.json"),
         )
+
         async with aiohttp.ClientSession() as session:
             client = HotSpring(host="192.168.1.100", session=session)
             await client.update()
             spa = await client.update()
 
-        assert spa.power.heater_power == expected_heater_power
-        assert spa.power.jet1_jet2_blower_current == expected_pump_current
-        assert spa.power.total_power == 75 + expected_heater_power
+        assert (
+            spa.power.heater_power,
+            spa.power.jet1_jet2_blower_current,
+        ) == expected_values
+        assert [entry.request.path for entry in aresponses.history].count(
+            Endpoint.DEBUG_DATA
+        ) == expected_debug_calls
 
 
 class TestMalformedResponse:

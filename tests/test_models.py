@@ -30,6 +30,7 @@ from hotspring.models import (
     Jet,
     LightZone,
     LogoLight,
+    PowerMetrics,
     Spa,
     SpaInfo,
     SpaLock,
@@ -655,36 +656,40 @@ class TestDiagnostics:
             pytest.param({"debugData": {"status": None}}, id="null_status"),
             pytest.param({"debugData": {"status": "invalid"}}, id="string_status"),
             pytest.param({"debugData": {"status": {}}}, id="empty_status"),
+            pytest.param(
+                {
+                    "debugData": {
+                        "status": {
+                            "spaFailureState": "Spa_Ok",
+                            **dict.fromkeys(
+                                (
+                                    "heaterError",
+                                    "powerFrequency",
+                                    "pressureSwitchStatus",
+                                    "circulationPumpFlowStatus",
+                                    "regulationThermistorTempStatus",
+                                    "limitThermistorStatus",
+                                    "L1_N_Volts",
+                                    "L2_N_Volts",
+                                    "Heater_Volts",
+                                    "jet3_Volts",
+                                    "jet1_jet2_blowerPower",
+                                    "smallLoadsPower",
+                                    "heaterPower",
+                                    "jet3Power",
+                                ),
+                                "0",
+                            ),
+                        }
+                    }
+                },
+                id="pre_sync_all_zero",
+            ),
         ],
     )
     def test_from_invalid_dict(self, invalid_data: dict[str, object]) -> None:
-        """Test parsing diagnostics with invalid or empty nested objects."""
+        """Test parsing diagnostics with invalid, empty, or pre-sync objects."""
         assert Diagnostics.from_dict(invalid_data) == Diagnostics()
-
-    def test_pre_sync_all_zero_normalizes_decoded_fields_to_none(self) -> None:
-        """Test real pre-sync /addDebugData (Spa_Ok with all zeros) returns defaults."""
-        data: dict[str, object] = {
-            "debugData": {
-                "status": {
-                    "spaFailureState": "Spa_Ok",
-                    "heaterError": "0",
-                    "powerFrequency": "0",
-                    "pressureSwitchStatus": "0",
-                    "circulationPumpFlowStatus": "0",
-                    "regulationThermistorTempStatus": "0",
-                    "limitThermistorStatus": "0",
-                    "L1_N_Volts": "0",
-                    "L2_N_Volts": "0",
-                    "Heater_Volts": "0",
-                    "jet3_Volts": "0",
-                    "jet1_jet2_blowerPower": "0",
-                    "smallLoadsPower": "0",
-                    "heaterPower": "0",
-                    "jet3Power": "0",
-                }
-            }
-        }
-        assert Diagnostics.from_dict(data) == Diagnostics()
 
     def test_decoded_voltage_clean_cycle_and_filter_times(self) -> None:
         """Test decoding shifted voltage, clean-cycle, and filter fields."""
@@ -806,28 +811,24 @@ class TestPowerMetrics:
     """Tests for reconstructed PowerMetrics across /status and /addDebugData."""
 
     @pytest.mark.parametrize(
-        ("status_data", "expected_needs_diagnostics"),
+        "status_data",
         [
-            pytest.param({}, False, id="empty"),
-            pytest.param(_power_status(heater="on"), False, id="unsupported_board"),
+            pytest.param({}, id="empty"),
+            pytest.param(_power_status(heater="on"), id="unsupported_board"),
             pytest.param(
                 _power_status((0, 0, 16128, 0)),
-                True,
                 id="idle_awaiting_baseline_debug",
             ),
             pytest.param(
                 _power_status((0, 6912, 18439, 0), jet1="highSpeed"),
-                True,
                 id="jet1_awaiting_debug",
             ),
             pytest.param(
                 _power_status((0, 0, 16128, 30208), heater="on"),
-                True,
                 id="heating_awaiting_debug",
             ),
             pytest.param(
                 _power_status((2048, 0, 17920, 0), jet3="highSpeed"),
-                True,
                 id="jet3_awaiting_debug",
             ),
         ],
@@ -835,51 +836,42 @@ class TestPowerMetrics:
     def test_status_only_power_metrics(
         self,
         status_data: dict[str, object],
-        expected_needs_diagnostics: bool,
         snapshot: SnapshotAssertion,
     ) -> None:
         """Test power state derived from /status alone before /addDebugData."""
-        spa = Spa(status_data)
-        assert spa.needs_diagnostics_for_power is expected_needs_diagnostics
-        assert (spa.power, spa.power.total_power) == snapshot
+        assert Spa(status_data).power == snapshot
 
     @pytest.mark.parametrize(
-        ("status_data", "debug_data", "expected_needs_diagnostics"),
+        ("status_data", "debug_data"),
         [
             pytest.param(
                 _power_status((0, 0, 16128, 0)),
                 _power_debug(),
-                False,
                 id="idle_synced",
             ),
             pytest.param(
                 _power_status((0, 2048, 18434, 0), jet1="lowSpeed"),
                 _power_debug(l2_volts=256),
-                True,
                 id="jet1_low",
             ),
             pytest.param(
                 _power_status((0, 7680, 15631, 0), jet1="highSpeed", jet2="highSpeed"),
                 _power_debug(l2_volts=3584),
-                True,
                 id="both_jets_high",
             ),
             pytest.param(
                 _power_status((0, 0, 16128, 30208), heater="on"),
                 _power_debug(jet3_volts=3840, jet1_jet2_blower_power=15),
-                True,
                 id="heater_only",
             ),
             pytest.param(
                 _power_status((0, 3584, 18183, 16128), heater="on", jet1="highSpeed"),
                 _power_debug(l2_volts=1792, jet3_volts=3840, jet1_jet2_blower_power=15),
-                True,
                 id="heater_and_jet1_high",
             ),
             pytest.param(
                 _power_status((2048, 0, 17920, 0), jet3="highSpeed"),
                 _power_debug(jet1_jet2_blower_power=51200, small_loads_power=7),
-                True,
                 id="jet3_active",
             ),
         ],
@@ -888,14 +880,80 @@ class TestPowerMetrics:
         self,
         status_data: dict[str, object],
         debug_data: dict[str, object],
-        expected_needs_diagnostics: bool,
         snapshot: SnapshotAssertion,
     ) -> None:
         """Test byte-reconstructed power and current across active spa circuits."""
         spa = Spa(status_data)
         spa.update_diagnostics(debug_data)
-        assert spa.needs_diagnostics_for_power is expected_needs_diagnostics
-        assert (spa.power, spa.power.total_power) == snapshot
+        assert spa.power == snapshot
+
+    @pytest.mark.parametrize(
+        ("status_data", "debug_data", "expected"),
+        [
+            pytest.param({}, None, False, id="empty"),
+            pytest.param(_power_status(heater="on"), None, False, id="unsupported"),
+            pytest.param(
+                _power_status((0, 0, 16128, 0)), None, True, id="idle_unsynced"
+            ),
+            pytest.param(
+                _power_status((0, 0, 16128, 0)), _power_debug(), False, id="idle_synced"
+            ),
+            pytest.param(
+                _power_status((0, 6912, 18439, 0), jet1="highSpeed"),
+                _power_debug(l2_volts=1536),
+                True,
+                id="jet1_high_synced",
+            ),
+            pytest.param(
+                _power_status((0, 0, 16128, 30208), heater="on"),
+                _power_debug(jet3_volts=3840, jet1_jet2_blower_power=15),
+                True,
+                id="heater_synced",
+            ),
+            pytest.param(
+                _power_status((2048, 0, 17920, 0), jet3="highSpeed"),
+                _power_debug(jet1_jet2_blower_power=51200, small_loads_power=7),
+                True,
+                id="jet3_synced",
+            ),
+        ],
+    )
+    def test_needs_diagnostics_for_power(
+        self,
+        status_data: dict[str, object],
+        debug_data: dict[str, object] | None,
+        expected: bool,
+    ) -> None:
+        """Test when /addDebugData polling is required for baseline or active loads."""
+        spa = Spa(status_data)
+        if debug_data is not None:
+            spa.update_diagnostics(debug_data)
+        assert spa.needs_diagnostics_for_power is expected
+
+    @pytest.mark.parametrize(
+        ("power", "expected_total"),
+        [
+            pytest.param(
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=63,
+                    jet1_jet2_blower_power=1806,
+                    heater_power=3903,
+                    jet3_power=0,
+                ),
+                5772,
+                id="all_circuits_known",
+            ),
+            pytest.param(
+                PowerMetrics(supported=True, small_loads_power=63),
+                None,
+                id="partial_circuits",
+            ),
+        ],
+    )
+    def test_total_power(self, power: PowerMetrics, expected_total: int | None) -> None:
+        """Test derived total_power across known and incomplete circuit readings."""
+        assert power.total_power == expected_total
 
     @pytest.mark.parametrize(
         "status_update",
@@ -940,7 +998,7 @@ class TestPowerMetrics:
             _power_debug(l2_volts=3584, jet3_volts=3584, jet1_jet2_blower_power=14)
         )
         spa.update_from_dict(status_update)
-        assert (spa.power, spa.power.total_power) == snapshot
+        assert spa.power == snapshot
 
     def test_unsynced_debug_data_preserves_active_power_and_diagnostics(self) -> None:
         """Test empty /addDebugData keeps cached active power and diagnostics."""
@@ -951,24 +1009,46 @@ class TestPowerMetrics:
         spa.update_diagnostics({})
         assert (spa.power, spa.diagnostics) == expected
 
-    def test_heater_echo_before_status_prevents_stale_debug_pairing(self) -> None:
-        """Test heater-on echo without test_data blocks stale low-byte pairing."""
-        spa = Spa(_power_status((0, 0, 16128, 0), heater="off"))
-        spa.update_from_dict({"heater": {"status": {"heater": "on"}}})
-        spa.update_diagnostics(_power_debug(jet3_volts=3840, jet1_jet2_blower_power=15))
+    @pytest.mark.parametrize(
+        ("initial_status", "intermediate_update", "debug_updates", "expected"),
+        [
+            pytest.param(
+                _power_status((0, 0, 16128, 0), heater="off"),
+                {"heater": {"status": {"heater": "on"}}},
+                [_power_debug(jet3_volts=3840, jet1_jet2_blower_power=15)],
+                (0, None, None),
+                id="heater_echo_invalidates_pending_status",
+            ),
+            pytest.param(
+                _power_status((0, 0, 16128, 30208), heater="on"),
+                {},
+                [
+                    _power_debug(jet3_volts=3840, jet1_jet2_blower_power=14),
+                    _power_debug(jet3_volts=3840, jet1_jet2_blower_power=15),
+                ],
+                (0, 3702, 15),
+                id="consecutive_debug_consumes_pending_status",
+            ),
+        ],
+    )
+    def test_pending_status_words_not_paired_when_stale(
+        self,
+        initial_status: dict[str, object],
+        intermediate_update: dict[str, object],
+        debug_updates: list[dict[str, object]],
+        expected: tuple[int | None, int | None, int | None],
+    ) -> None:
+        """Test pending /status words are invalidated on echo and used at most once."""
+        spa = Spa(initial_status)
+        spa.update_from_dict(intermediate_update)
+        for debug_data in debug_updates:
+            spa.update_diagnostics(debug_data)
 
-        assert spa.power.small_loads_current == 0
-        assert spa.power.heater_power is None
-        assert spa.power.heater_current is None
-
-    def test_consecutive_debug_updates_do_not_repair_stale_status(self) -> None:
-        """Test repeat /addDebugData calls without /status preserve heater power."""
-        spa = Spa(_power_status((0, 0, 16128, 30208), heater="on"))
-        spa.update_diagnostics(_power_debug(jet3_volts=3840, jet1_jet2_blower_power=14))
-        expected = spa.power
-
-        spa.update_diagnostics(_power_debug(jet3_volts=3840, jet1_jet2_blower_power=15))
-        assert spa.power == expected
+        assert (
+            spa.power.small_loads_current,
+            spa.power.heater_power,
+            spa.power.heater_current,
+        ) == expected
 
 
 class TestSpaInfo:
@@ -1559,31 +1639,19 @@ class TestSpa:  # pylint: disable=too-many-public-methods
         assert spa.jets[3].jet_id == 3
 
     @pytest.mark.parametrize(
-        ("raw_runtimes", "expected_runtimes"),
+        "raw_runtimes",
         [
             pytest.param(
                 (60475904, -1345838592, 921600, 460800),
-                (11520034, 3200.01, 236234, None, 3600, 1800),
                 id="synced_with_signed_overflow",
             ),
-            pytest.param(
-                (0, 0, 0, 0),
-                (None, None, None, None, None, None),
-                id="pre_sync_all_zero",
-            ),
+            pytest.param((0, 0, 0, 0), id="pre_sync_all_zero"),
         ],
     )
     def test_shifted_runtime_routing(
         self,
         raw_runtimes: tuple[int, int, int, int],
-        expected_runtimes: tuple[
-            int | None,
-            float | None,
-            int | None,
-            int | None,
-            int | None,
-            int | None,
-        ],
+        snapshot: SnapshotAssertion,
     ) -> None:
         """Test shifted runtime routing, signed overflow, and pre-sync zeros."""
         heater_hours, jet1_raw, jet2_raw, jet3_raw = raw_runtimes
@@ -1605,7 +1673,7 @@ class TestSpa:  # pylint: disable=too-many-public-methods
             spa.jets[2].on_seconds,
             spa.jets[3].on_seconds,
             spa.blower.on_seconds,
-        ) == expected_runtimes
+        ) == snapshot
 
     def test_partial_update_versions(self, status_response: dict[str, object]) -> None:
         """Test updating product versions partially retains cached fields."""

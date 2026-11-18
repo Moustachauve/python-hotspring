@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import contextlib
+import itertools
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -28,7 +29,15 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
+
+type _WordBlock = tuple[int | None, ...]
+type _PumpBlowerState = tuple[JetSpeed, JetSpeed, bool] | None
+type _CircuitStates = tuple[bool, bool, _PumpBlowerState]
+
+_NO_HEAD_WORDS: _WordBlock = (None, None, None, None)
+_NO_STATUS_WORDS: _WordBlock = (None, None, None, None)
+_NO_TAIL_WORDS: _WordBlock = (None, None)
 
 
 class Spa:
@@ -55,8 +64,7 @@ class Spa:
     test_metrics: SpaTestData
     power: PowerMetrics
     system_uptime_seconds: int | None
-    _status_electrical: _StatusElectrical | None
-    _status_electrical_pairable: bool
+    _pending_status_words: _WordBlock
 
     def __init__(self, data: dict[str, object]) -> None:
         """Initialize a Spa from the API response.
@@ -83,8 +91,7 @@ class Spa:
         self.info = SpaInfo()
         self.connection_status = ConnectionStatus()
         self.diagnostics = Diagnostics()
-        self._status_electrical = None
-        self._status_electrical_pairable = False
+        self._pending_status_words = _NO_STATUS_WORDS
         if data:
             self.update_from_dict(data)
 
@@ -101,7 +108,7 @@ class Spa:
 
         """
         updated: set[str] = set()
-        prior_active = self._active_circuit_flags
+        prior_states = self._circuit_states
         previous_power = self.power
         previous_uptime = self.system_uptime_seconds
 
@@ -157,21 +164,32 @@ class Spa:
         if self.system_uptime_seconds != previous_uptime:
             updated.add("system_uptime_seconds")
 
-        next_electrical = _extract_status_electrical(data)
-        if next_electrical is not None:
-            self._status_electrical = next_electrical
-            self._status_electrical_pairable = True
-        elif self.heater.is_on != prior_active[0]:
-            self._status_electrical_pairable = False
-
-        self._recompute_power(
-            prior_active=prior_active,
-            status_fresh=next_electrical is not None,
-        )
+        self._update_power_from_status(data, prior_states)
         if self.power != previous_power:
             updated.add("power")
 
         return updated
+
+    def _update_power_from_status(
+        self, data: dict[str, object], prior_states: _CircuitStates
+    ) -> None:
+        """Update power metrics and pending words from a /status or echo dict."""
+        status_words = _extract_status_words(data)
+        if status_words is not None:
+            self._pending_status_words = status_words
+            fresh_power = _decode_registers(
+                _NO_HEAD_WORDS, status_words, _NO_TAIL_WORDS
+            )
+        else:
+            if self._circuit_states != prior_states:
+                self._pending_status_words = _NO_STATUS_WORDS
+            fresh_power = {}
+
+        self._apply_power_words(
+            fresh_power,
+            prior_states=prior_states,
+            from_status=status_words is not None,
+        )
 
     def update_info(self, data: dict[str, object]) -> None:
         """Update spa identity from /startup and /spamodel responses.
@@ -232,15 +250,14 @@ class Spa:
             data: The JSON response from GET /addDebugData.
 
         """
-        self.diagnostics, debug_words = _parse_diagnostics_and_electrical(
-            data, existing=self.diagnostics
+        self.diagnostics, fresh_power, synced = _parse_diagnostics_and_electrical(
+            data,
+            existing=self.diagnostics,
+            status_words=self._pending_status_words,
         )
-        self._recompute_power(
-            prior_active=self._active_circuit_flags,
-            debug_words=debug_words,
-        )
-        if debug_words is not None:
-            self._status_electrical_pairable = False
+        if synced:
+            self._pending_status_words = _NO_STATUS_WORDS
+            self._apply_power_words(fresh_power, prior_states=self._circuit_states)
 
     def update_freshwater_iq(self, data: dict[str, object]) -> None:
         """Update FreshWater IQ data from /getFWIQData response.
@@ -267,134 +284,69 @@ class Spa:
     def _apply_shifted_runtimes(
         self, data: dict[str, object], updated: set[str]
     ) -> None:
-        """Route misaligned 24-bit runtime fields to their actual components.
-
-        Live testing shows that runtime counters in /status are shifted across
-        adjacent fields: ``heaterHours`` tracks Jet 1 runtime, ``jet_1_ON_sec``
-        tracks overall system uptime, ``jet_2_ON_sec`` tracks Jet 3 runtime, and
-        ``jet_3_ON_sec`` tracks blower runtime.
-        """
-        runtimes = _extract_shifted_runtimes(data)
-        present_values = [value for value in runtimes if value is not None]
-        if not present_values:
+        """Route misaligned 24-bit runtime fields to their actual components."""
+        decoded = {
+            target: _decode_runtime_seconds(raw)
+            for path, target in _RUNTIME_ROUTES
+            if (raw := _dig(data, path)) is not _MISSING
+        }
+        if not decoded:
             return
-
-        is_synced = (
-            bool(self.versions.control_box)
+        if not (
+            self.versions.control_box
             or self.system_uptime_seconds is not None
-            or any(value != 0 for value in present_values)
-        )
-        if not is_synced:
+            or any(decoded.values())
+        ):
             return
 
-        if runtimes.uptime_seconds is not None:
-            self.system_uptime_seconds = runtimes.uptime_seconds
-        if (
-            runtimes.jet1_seconds is not None
-            and 1 in self.jets
-            and self.jets[1].on_seconds != runtimes.jet1_seconds
+        if "uptime" in decoded:
+            self.system_uptime_seconds = decoded["uptime"]
+        if (blower_seconds := decoded.get("blower")) is not None and (
+            self.blower.on_seconds != blower_seconds
         ):
-            self.jets[1] = replace(self.jets[1], on_seconds=runtimes.jet1_seconds)
-            updated.add("jets")
-        if (
-            runtimes.jet3_seconds is not None
-            and 3 in self.jets
-            and self.jets[3].on_seconds != runtimes.jet3_seconds
-        ):
-            self.jets[3] = replace(self.jets[3], on_seconds=runtimes.jet3_seconds)
-            updated.add("jets")
-        if (
-            runtimes.blower_seconds is not None
-            and self.blower.on_seconds != runtimes.blower_seconds
-        ):
-            self.blower = replace(self.blower, on_seconds=runtimes.blower_seconds)
+            self.blower = replace(self.blower, on_seconds=blower_seconds)
             updated.add("blower")
+        for target, jet_id in (("jet1", 1), ("jet3", 3)):
+            if (
+                (seconds := decoded.get(target)) is not None
+                and jet_id in self.jets
+                and self.jets[jet_id].on_seconds != seconds
+            ):
+                self.jets[jet_id] = replace(self.jets[jet_id], on_seconds=seconds)
+                updated.add("jets")
 
-    def _recompute_power(
+    def _apply_power_words(
         self,
+        fresh: dict[str, int],
         *,
-        prior_active: tuple[bool, bool, tuple[JetSpeed, JetSpeed, bool]],
-        status_fresh: bool = False,
-        debug_words: _DebugElectrical | None = None,
+        prior_states: _CircuitStates,
+        from_status: bool = False,
     ) -> None:
-        """Reconstruct PowerMetrics from /status and paired /addDebugData words."""
-        if self._status_electrical is None:
-            self.power = PowerMetrics()
-            return
+        """Merge freshly decoded power/current words and apply circuit gating."""
+        if from_status:
+            if fresh.get("small_loads_power", 0) <= 0:
+                self.power = PowerMetrics()
+                self._pending_status_words = _NO_STATUS_WORDS
+                return
+            power = replace(self.power, supported=True, **fresh)
+        else:
+            if not self.power.supported:
+                return
+            power = replace(self.power, **fresh)
 
-        status_words = self._status_electrical
-        small_loads_power = _reconstruct_uint16(
-            status_words.heater_current_word,
-            status_words.jet3_current_word,
-        )
-        if small_loads_power <= 0:
-            self.power = PowerMetrics()
-            return
-
-        was_heating, was_jet3_on, prior_pump_blower_state = prior_active
-        jet3_is_on = self._is_jet3_on
-        pump_blower_state = self._pump_blower_state
-        pump_blower_is_on = pump_blower_state != (JetSpeed.OFF, JetSpeed.OFF, False)
-        pump_blower_unchanged = (
-            pump_blower_is_on and pump_blower_state == prior_pump_blower_state
-        )
-        fresh = _decode_fresh_electrical(
-            status_words,
-            debug_words,
-            status_fresh=status_fresh,
-            status_pairable=self._status_electrical_pairable,
-        )
-
-        self.power = PowerMetrics(
-            supported=True,
-            small_loads_power=small_loads_power,
-            jet1_jet2_blower_power=_resolve_gated_metric(
-                is_active=pump_blower_is_on,
-                was_active=pump_blower_unchanged,
-                fresh_value=fresh.pump_blower_power,
-                previous_value=self.power.jet1_jet2_blower_power,
-            ),
-            heater_power=_resolve_gated_metric(
-                is_active=self.heater.is_on,
-                was_active=was_heating,
-                fresh_value=fresh.heater_power,
-                previous_value=self.power.heater_power,
-            ),
-            jet3_power=_resolve_gated_metric(
-                is_active=jet3_is_on,
-                was_active=was_jet3_on,
-                fresh_value=fresh.jet3_power,
-                previous_value=self.power.jet3_power,
-            ),
-            jet1_jet2_blower_current=_resolve_gated_metric(
-                is_active=pump_blower_is_on,
-                was_active=pump_blower_unchanged,
-                fresh_value=fresh.pump_blower_current,
-                previous_value=self.power.jet1_jet2_blower_current,
-            ),
-            small_loads_current=(
-                fresh.small_loads_current
-                if fresh.small_loads_current is not None
-                else self.power.small_loads_current
-            ),
-            heater_current=_resolve_gated_metric(
-                is_active=self.heater.is_on,
-                was_active=was_heating,
-                fresh_value=fresh.heater_current,
-                previous_value=self.power.heater_current,
-            ),
-            jet3_current=_resolve_gated_metric(
-                is_active=jet3_is_on,
-                was_active=was_jet3_on,
-                fresh_value=fresh.jet3_current,
-                previous_value=self.power.jet3_current,
-            ),
-        )
+        updates: dict[str, int | None] = {}
+        for state, before, fields in zip(
+            self._circuit_states, prior_states, _CIRCUIT_FIELDS, strict=True
+        ):
+            if not state:
+                updates.update(dict.fromkeys(fields, 0))
+            elif state != before:
+                for field in fields:
+                    updates[field] = fresh.get(field)
+        self.power = replace(power, **updates)
 
     @property
-    def _active_circuit_flags(
-        self,
-    ) -> tuple[bool, bool, tuple[JetSpeed, JetSpeed, bool]]:
+    def _circuit_states(self) -> _CircuitStates:
         """Return active-state snapshot for (heater, jet3, jet1+jet2+blower)."""
         return (self.heater.is_on, self._is_jet3_on, self._pump_blower_state)
 
@@ -404,33 +356,27 @@ class Spa:
         return bool((jet3 := self.jets.get(3)) and jet3.is_enabled and jet3.is_on)
 
     @property
-    def _pump_blower_state(self) -> tuple[JetSpeed, JetSpeed, bool]:
-        """Return normalized active state of (Jet 1, Jet 2, Blower)."""
+    def _pump_blower_state(self) -> _PumpBlowerState:
+        """Return normalized active state of (Jet 1, Jet 2, Blower), or None if off."""
         jet1 = self.jets.get(1)
         jet2 = self.jets.get(2)
-        return (
+        state = (
             jet1.speed if jet1 is not None and jet1.is_on else JetSpeed.OFF,
             jet2.speed if jet2 is not None and jet2.is_on else JetSpeed.OFF,
             self.blower.is_on,
         )
+        return None if state == (JetSpeed.OFF, JetSpeed.OFF, False) else state
 
     @property
     def system_uptime_hours(self) -> float | None:
         """Return system uptime in hours when available."""
-        if self.system_uptime_seconds is None:
-            return None
-        return round(self.system_uptime_seconds / 3600.0, 2)
+        return _seconds_to_hours(self.system_uptime_seconds)
 
     @property
     def needs_diagnostics_for_power(self) -> bool:
         """Return True when /addDebugData is needed for power or current readings."""
-        if not self.power.supported:
-            return False
-        return (
-            self.power.small_loads_current is None
-            or self.heater.is_on
-            or self._is_jet3_on
-            or self._pump_blower_state != (JetSpeed.OFF, JetSpeed.OFF, False)
+        return self.power.supported and (
+            self.power.small_loads_current is None or any(self._circuit_states)
         )
 
     @property
@@ -648,9 +594,7 @@ class Jet:
     @property
     def on_hours(self) -> float | None:
         """Return cumulative jet runtime in hours when available."""
-        if self.on_seconds is None:
-            return None
-        return round(self.on_seconds / 3600.0, 2)
+        return _seconds_to_hours(self.on_seconds)
 
     @staticmethod
     def from_dict(
@@ -719,11 +663,20 @@ class Jet:
             A dict of Jet instances keyed by jet ID.
 
         """
+        if "control" in data and isinstance(data["control"], dict):
+            data = data["control"]
         existing_map = existing or {}
-        return {
-            jet_id: Jet.from_dict(jet_id, jet_data, existing=existing_map.get(jet_id))
-            for jet_id, jet_data in _iter_jet_sections(data)
-        }
+        jets: dict[int, Jet] = {}
+        for key, value in data.items():
+            if key.upper().startswith("JET") and isinstance(value, dict):
+                try:
+                    jet_id = int(key[3:])
+                except ValueError:
+                    continue
+                jets[jet_id] = Jet.from_dict(
+                    jet_id, value, existing=existing_map.get(jet_id)
+                )
+        return jets
 
 
 @dataclass
@@ -737,9 +690,7 @@ class Blower:
     @property
     def on_hours(self) -> float | None:
         """Return cumulative blower runtime in hours when available."""
-        if self.on_seconds is None:
-            return None
-        return round(self.on_seconds / 3600.0, 2)
+        return _seconds_to_hours(self.on_seconds)
 
     @staticmethod
     def from_dict(data: dict[str, object], existing: Blower | None = None) -> Blower:
@@ -1278,9 +1229,11 @@ class PowerMetrics:  # pylint: disable=too-many-instance-attributes
     On IQ2020/Eagle control boards equipped with current-sensing hardware,
     power readings reflect apparent power (``V_rms * I_rms`` in VA, equal to
     real Watts for the resistive heater and within ~1-25% of real Watts on
-    pump motors depending on power factor). On entry-level control boards
-    without current sensors or before initial controller sync, ``supported``
-    is ``False`` and all reading fields remain ``None``.
+    pump motors depending on power factor), and ``*_current`` fields report
+    whole Amps (``A``). ``small_loads_current`` is sampled at initial baseline
+    and refreshed while heater or pump loads are active. On entry-level
+    control boards without current sensors or before initial controller sync,
+    ``supported`` is ``False`` and all reading fields remain ``None``.
     """
 
     supported: bool = False
@@ -1296,20 +1249,15 @@ class PowerMetrics:  # pylint: disable=too-many-instance-attributes
     @property
     def total_power(self) -> int | None:
         """Return combined power across all four spa circuits when known."""
-        if (
-            not self.supported
-            or self.small_loads_power is None
-            or self.jet1_jet2_blower_power is None
-            or self.heater_power is None
-            or self.jet3_power is None
-        ):
-            return None
-        return (
-            self.small_loads_power
-            + self.jet1_jet2_blower_power
-            + self.heater_power
-            + self.jet3_power
+        parts = (
+            self.small_loads_power,
+            self.jet1_jet2_blower_power,
+            self.heater_power,
+            self.jet3_power,
         )
+        if None in parts:
+            return None
+        return sum(part for part in parts if part is not None)
 
 
 @dataclass
@@ -1371,133 +1319,112 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
     def from_dict(
         data: dict[str, object], existing: Diagnostics | None = None
     ) -> Diagnostics:
-        """Create a Diagnostics from API response data.
-
-        Args:
-        ----
-            data: The JSON response from GET /addDebugData, or an empty
-                dict for default values.
-            existing: Optional existing Diagnostics instance to preserve cached fields.
-
-        Returns:
-        -------
-            A Diagnostics instance.
-
-        """
-        diagnostics, _ = _parse_diagnostics_and_electrical(data, existing=existing)
+        """Create a Diagnostics instance from a GET /addDebugData response."""
+        diagnostics, _, _ = _parse_diagnostics_and_electrical(data, existing=existing)
         return diagnostics
 
 
-@dataclass(frozen=True)
-class _StatusElectrical:
-    """Raw 16-bit electrical words carried in /status."""
+_STATUS_ELECTRICAL_KEYS: tuple[str, ...] = (
+    "jet1+jet2+blowerCurrent",
+    "smallLoadsCurrent",
+    "heaterCurrent",
+    "jet3Current",
+)
 
-    jet1_jet2_blower_current_word: int = 0
-    small_loads_current_word: int = 0
-    heater_current_word: int = 0
-    jet3_current_word: int = 0
+_DEBUG_HEAD_KEYS: tuple[str, ...] = (
+    "L1_N_Volts",
+    "L2_N_Volts",
+    "Heater_Volts",
+    "jet3_Volts",
+)
+
+_DEBUG_TAIL_KEYS: tuple[str, ...] = (
+    "jet1_jet2_blowerPower",
+    "smallLoadsPower",
+)
+
+# HNA JSON is one byte out of phase with the controller register block.
+# Together, 4 debug head words + 4 /status test_data words + 2 debug tail words
+# form one 10-word sequence whose adjacent pairs yield these 9 registers.
+_REGISTER_NAMES: tuple[str, ...] = (
+    "jet3_volts",
+    "jet1_jet2_blower_current",
+    "small_loads_current",
+    "heater_current",
+    "jet3_current",
+    "jet1_jet2_blower_power",
+    "small_loads_power",
+    "heater_power",
+    "jet3_power",
+)
+
+_CIRCUIT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("heater_power", "heater_current"),
+    ("jet3_power", "jet3_current"),
+    ("jet1_jet2_blower_power", "jet1_jet2_blower_current"),
+)
+
+_RUNTIME_ROUTES: tuple[tuple[tuple[str, ...], str], ...] = (
+    # HNA shifts each 24-bit runtime counter into its neighboring JSON field.
+    (("heater", "status", "heaterHours"), "jet1"),
+    (("JET", "JET1", "status", "jet_1_ON_sec"), "uptime"),
+    (("JET", "JET2", "status", "jet_2_ON_sec"), "jet3"),
+    (("JET", "JET3", "status", "jet_3_ON_sec"), "blower"),
+)
+
+_DEBUG_STRING_KEYS: dict[str, str] = {
+    "heaterError": "heater_error",
+    "powerFrequency": "power_frequency",
+    "pressureSwitchStatus": "pressure_switch_status",
+    "circulationPumpFlowStatus": "circulation_pump_flow_status",
+    "regulationThermistorTempStatus": "regulation_thermistor_temp_status",
+    "limitThermistorStatus": "limit_thermistor_status",
+}
+
+_DEBUG_INTEGER_KEYS: tuple[str, ...] = (
+    *_DEBUG_HEAD_KEYS,
+    *_DEBUG_TAIL_KEYS,
+    "heaterPower",
+    "jet3Power",
+)
+
+_MISSING = object()
 
 
-@dataclass(frozen=True)
-class _DebugElectrical:
-    """Raw 16-bit electrical words carried in /addDebugData."""
-
-    l2_volts_word: int = 0
-    heater_volts_word: int = 0
-    jet3_volts_word: int = 0
-    jet1_jet2_blower_power_word: int = 0
-    small_loads_power_word: int = 0
+def _seconds_to_hours(seconds: int | None) -> float | None:
+    """Convert elapsed seconds to rounded hours, preserving None."""
+    if seconds is None:
+        return None
+    return round(seconds / 3600.0, 2)
 
 
-class _ShiftedRuntimes(NamedTuple):
-    """Decoded 24-bit runtime counters extracted from /status."""
-
-    jet1_seconds: int | None
-    uptime_seconds: int | None
-    jet3_seconds: int | None
-    blower_seconds: int | None
-
-
-class _FreshElectrical(NamedTuple):
-    """Freshly decoded 16-bit electrical values from the current poll(s)."""
-
-    pump_blower_power: int | None = None
-    heater_power: int | None = None
-    jet3_power: int | None = None
-    pump_blower_current: int | None = None
-    small_loads_current: int | None = None
-    heater_current: int | None = None
-    jet3_current: int | None = None
-
-
-def _decode_fresh_electrical(
-    status_words: _StatusElectrical,
-    debug_words: _DebugElectrical | None,
-    *,
-    status_fresh: bool,
-    status_pairable: bool,
-) -> _FreshElectrical:
-    """Decode fresh 16-bit metrics available from the current poll(s)."""
-    pump_blower_power: int | None = None
-    jet3_current: int | None = None
-    if status_fresh:
-        jet3_current = _reconstruct_uint16(
-            status_words.jet1_jet2_blower_current_word,
-            status_words.small_loads_current_word,
-        )
-        pump_blower_power = _reconstruct_uint16(
-            status_words.small_loads_current_word,
-            status_words.heater_current_word,
-        )
-
-    heater_power: int | None = None
-    jet3_power: int | None = None
-    pump_blower_current: int | None = None
-    small_loads_current: int | None = None
-    heater_current: int | None = None
-    if debug_words is not None:
-        pump_blower_current = _reconstruct_uint16(
-            debug_words.l2_volts_word,
-            debug_words.heater_volts_word,
-        )
-        small_loads_current = _reconstruct_uint16(
-            debug_words.heater_volts_word,
-            debug_words.jet3_volts_word,
-        )
-        if status_pairable:
-            heater_current = _reconstruct_uint16(
-                debug_words.jet3_volts_word,
-                status_words.jet1_jet2_blower_current_word,
-            )
-            heater_power = _reconstruct_uint16(
-                status_words.jet3_current_word,
-                debug_words.jet1_jet2_blower_power_word,
-            )
-        jet3_power = _reconstruct_uint16(
-            debug_words.jet1_jet2_blower_power_word,
-            debug_words.small_loads_power_word,
-        )
-
-    return _FreshElectrical(
-        pump_blower_power=pump_blower_power,
-        heater_power=heater_power,
-        jet3_power=jet3_power,
-        pump_blower_current=pump_blower_current,
-        small_loads_current=small_loads_current,
-        heater_current=heater_current,
-        jet3_current=jet3_current,
-    )
+def _dig(data: dict[str, object], path: tuple[str, ...]) -> object:
+    """Return nested dict value along ``path``, or ``_MISSING`` if absent."""
+    cursor: object = data
+    for key in path:
+        if not isinstance(cursor, dict) or key not in cursor:
+            return _MISSING
+        cursor = cursor[key]
+    return cursor
 
 
 def _reconstruct_uint16(low_byte_word: int, high_byte_word: int) -> int:
-    """Reconstruct a 16-bit register split across two adjacent misaligned words.
-
-    Live load testing shows an alignment bug in the HNA's JSON output where
-    adjacent 16-bit values are shifted by one byte: ``low_byte_word`` holds the
-    register's low byte in bits 8..15, and ``high_byte_word`` holds its high
-    byte in bits 0..7.
-    """
+    """Reconstruct a 16-bit register split across two adjacent misaligned words."""
     return ((high_byte_word & 0xFF) << 8) | ((low_byte_word >> 8) & 0xFF)
+
+
+def _decode_registers(
+    head: _WordBlock, status: _WordBlock, tail: _WordBlock
+) -> dict[str, int]:
+    """Reconstruct 16-bit registers across the contiguous 10-word API stream."""
+    words = (*head, *status, *tail)
+    return {
+        name: _reconstruct_uint16(low_word, high_word)
+        for name, (low_word, high_word) in zip(
+            _REGISTER_NAMES, itertools.pairwise(words), strict=True
+        )
+        if low_word is not None and high_word is not None
+    }
 
 
 def _decode_runtime_seconds(raw: object) -> int:
@@ -1511,161 +1438,33 @@ def _decode_runtime_seconds(raw: object) -> int:
     return (raw_value & 0xFFFFFFFF) >> 8
 
 
-def _iter_jet_sections(
-    jets_data: dict[str, object],
-) -> Iterator[tuple[int, dict[str, object]]]:
-    """Yield ``(jet_id, jet_data)`` pairs from a ``JET`` section dict."""
-    source = (
-        jets_data["control"]
-        if "control" in jets_data and isinstance(jets_data["control"], dict)
-        else jets_data
-    )
-    for key, value in source.items():
-        if key.upper().startswith("JET") and isinstance(value, dict):
-            try:
-                jet_id = int(key[3:])
-            except ValueError:
-                continue
-            yield jet_id, value
-
-
-def _extract_shifted_runtimes(data: dict[str, object]) -> _ShiftedRuntimes:
-    """Extract decoded runtime counters from /status sections when present."""
-    jet1_seconds: int | None = None
-    uptime_seconds: int | None = None
-    jet3_seconds: int | None = None
-    blower_seconds: int | None = None
-
-    heater = data.get("heater")
-    if isinstance(heater, dict):
-        heater_status = heater.get("status")
-        if isinstance(heater_status, dict) and "heaterHours" in heater_status:
-            jet1_seconds = _decode_runtime_seconds(heater_status["heaterHours"])
-
-    jets = data.get("JET")
-    if isinstance(jets, dict):
-        for jet_id, jet_data in _iter_jet_sections(jets):
-            status = jet_data.get("status")
-            if not isinstance(status, dict):
-                continue
-            if jet_id == 1 and "jet_1_ON_sec" in status:
-                uptime_seconds = _decode_runtime_seconds(status["jet_1_ON_sec"])
-            elif jet_id == 2 and "jet_2_ON_sec" in status:
-                jet3_seconds = _decode_runtime_seconds(status["jet_2_ON_sec"])
-            elif jet_id == 3 and "jet_3_ON_sec" in status:
-                blower_seconds = _decode_runtime_seconds(status["jet_3_ON_sec"])
-
-    return _ShiftedRuntimes(
-        jet1_seconds=jet1_seconds,
-        uptime_seconds=uptime_seconds,
-        jet3_seconds=jet3_seconds,
-        blower_seconds=blower_seconds,
-    )
-
-
-_TEST_DATA_ELECTRICAL_KEYS: tuple[str, ...] = (
-    "jet1+jet2+blowerCurrent",
-    "smallLoadsCurrent",
-    "heaterCurrent",
-    "jet3Current",
-)
-
-
-def _extract_status_electrical(data: dict[str, object]) -> _StatusElectrical | None:
-    """Extract a complete 4-word electrical block from /status when present.
-
-    ``_StatusElectrical`` is only updated when ``test_data.status`` carries all
-    four contiguous words so adjacent bytes are never paired across polls.
-    """
+def _extract_status_words(data: dict[str, object]) -> _WordBlock | None:
+    """Extract the 4 contiguous electrical words from /status when complete."""
     test_data = data.get("test_data")
     if not isinstance(test_data, dict):
         return None
     test_data_status = test_data.get("status")
     if not isinstance(test_data_status, dict) or not all(
-        key in test_data_status for key in _TEST_DATA_ELECTRICAL_KEYS
+        key in test_data_status for key in _STATUS_ELECTRICAL_KEYS
     ):
         return None
-
-    return _StatusElectrical(
-        jet1_jet2_blower_current_word=int(test_data_status["jet1+jet2+blowerCurrent"]),
-        small_loads_current_word=int(test_data_status["smallLoadsCurrent"]),
-        heater_current_word=int(test_data_status["heaterCurrent"]),
-        jet3_current_word=int(test_data_status["jet3Current"]),
-    )
-
-
-_DEBUG_STRING_KEYS: dict[str, str] = {
-    "heaterError": "heater_error",
-    "powerFrequency": "power_frequency",
-    "pressureSwitchStatus": "pressure_switch_status",
-    "circulationPumpFlowStatus": "circulation_pump_flow_status",
-    "regulationThermistorTempStatus": "regulation_thermistor_temp_status",
-    "limitThermistorStatus": "limit_thermistor_status",
-}
-
-_DEBUG_INTEGER_KEYS: tuple[str, ...] = (
-    "L1_N_Volts",
-    "L2_N_Volts",
-    "Heater_Volts",
-    "jet3_Volts",
-    "jet1_jet2_blowerPower",
-    "smallLoadsPower",
-    "heaterPower",
-    "jet3Power",
-)
-
-
-def _resolve_gated_metric(
-    *,
-    is_active: bool,
-    was_active: bool,
-    fresh_value: int | None,
-    previous_value: int | None,
-) -> int | None:
-    """Resolve an active-gated metric without tearing across asynchronous polls."""
-    if not is_active:
-        return 0
-    if fresh_value is not None:
-        return fresh_value
-    if was_active:
-        return previous_value
-    return None
-
-
-def _decode_synced_diagnostics_fields(
-    parsed_integers: dict[str, int],
-) -> dict[str, object]:
-    """Extract decoded voltage, clean-cycle, and filter fields from /addDebugData."""
-    decoded: dict[str, object] = {}
-    if "L1_N_Volts" in parsed_integers:
-        l1_volts_word = parsed_integers["L1_N_Volts"]
-        decoded["l2_voltage_above_256v"] = bool(l1_volts_word & 0xFF)
-        if "L2_N_Volts" in parsed_integers:
-            decoded["jet3_volts"] = _reconstruct_uint16(
-                l1_volts_word,
-                parsed_integers["L2_N_Volts"],
-            )
-    if "smallLoadsPower" in parsed_integers:
-        decoded["daily_clean_cycle"] = (parsed_integers["smallLoadsPower"] >> 8) & 0xFF
-    if "heaterPower" in parsed_integers:
-        decoded["filter_1_minutes"] = parsed_integers["heaterPower"]
-    if "jet3Power" in parsed_integers:
-        decoded["filter_2_minutes"] = parsed_integers["jet3Power"]
-    return decoded
+    return tuple(int(test_data_status[key]) for key in _STATUS_ELECTRICAL_KEYS)
 
 
 def _parse_diagnostics_and_electrical(
-    data: dict[str, object], existing: Diagnostics | None = None
-) -> tuple[Diagnostics, _DebugElectrical | None]:
-    """Parse /addDebugData into Diagnostics and raw electrical words."""
+    data: dict[str, object],
+    existing: Diagnostics | None = None,
+    status_words: _WordBlock = _NO_STATUS_WORDS,
+) -> tuple[Diagnostics, dict[str, int], bool]:
+    """Parse /addDebugData into Diagnostics, decoded electrical values, and sync."""
     base = existing or Diagnostics()
     debug_data = data.get("debugData")
     if not isinstance(debug_data, dict):
-        return base, None
+        return base, {}, False
 
     debug = debug_data.get("status")
     if not isinstance(debug, dict) or not debug:
-        return base, None
+        return base, {}, False
 
     string_fields = {
         attribute_name: str(debug[json_key])
@@ -1679,28 +1478,34 @@ def _parse_diagnostics_and_electrical(
     }
 
     raw_failure = debug.get("spaFailureState")
-    has_fault = raw_failure is not None and str(raw_failure) not in ("", "Spa_Ok")
-    is_synced = (
-        has_fault
+    if not (
+        (raw_failure is not None and str(raw_failure) not in ("", "Spa_Ok"))
         or any(value != "0" for value in string_fields.values())
         or any(value != 0 for value in parsed_integers.values())
+    ):
+        return base, {}, False
+
+    registers = _decode_registers(
+        tuple(parsed_integers.get(key) for key in _DEBUG_HEAD_KEYS),
+        status_words,
+        tuple(parsed_integers.get(key) for key in _DEBUG_TAIL_KEYS),
     )
-    if not is_synced:
-        return base, None
 
     kwargs: dict[str, object] = dict(string_fields)
     if "spaFailureState" in debug:
         kwargs["spa_failure_state"] = SpaFailureState.build(raw_failure)
-    kwargs.update(_decode_synced_diagnostics_fields(parsed_integers))
+    if (jet3_volts := registers.pop("jet3_volts", None)) is not None:
+        kwargs["jet3_volts"] = jet3_volts
+    if "L1_N_Volts" in parsed_integers:
+        kwargs["l2_voltage_above_256v"] = bool(parsed_integers["L1_N_Volts"] & 0xFF)
+    if "smallLoadsPower" in parsed_integers:
+        kwargs["daily_clean_cycle"] = (parsed_integers["smallLoadsPower"] >> 8) & 0xFF
+    if "heaterPower" in parsed_integers:
+        kwargs["filter_1_minutes"] = parsed_integers["heaterPower"]
+    if "jet3Power" in parsed_integers:
+        kwargs["filter_2_minutes"] = parsed_integers["jet3Power"]
 
-    debug_words = _DebugElectrical(
-        l2_volts_word=parsed_integers.get("L2_N_Volts", 0),
-        heater_volts_word=parsed_integers.get("Heater_Volts", 0),
-        jet3_volts_word=parsed_integers.get("jet3_Volts", 0),
-        jet1_jet2_blower_power_word=parsed_integers.get("jet1_jet2_blowerPower", 0),
-        small_loads_power_word=parsed_integers.get("smallLoadsPower", 0),
-    )
-    return replace(base, **kwargs), debug_words
+    return replace(base, **kwargs), registers, True
 
 
 class _SectionParser(NamedTuple):

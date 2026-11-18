@@ -316,7 +316,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                 )
                 raise HotSpringSNADetectedError(msg)
 
-            await self._refresh_power_diagnostics()
+            await self._refresh_power_diagnostics(self.spa)
             self._identity_loaded = True
             return self.spa
 
@@ -337,23 +337,18 @@ class HotSpring:  # pylint: disable=too-many-public-methods
         ):
             self.spa.connection_status.spa_connected = True
 
-        await self._refresh_power_diagnostics()
+        await self._refresh_power_diagnostics(self.spa)
         return self.spa
 
-    async def _refresh_power_diagnostics(self) -> None:
+    async def _refresh_power_diagnostics(self, spa: Spa) -> None:
         """Fetch /addDebugData when needed for baseline current or active loads."""
         if (
-            self.spa is not None
-            and self.spa.connection_status.spa_connected
-            and self.spa.needs_diagnostics_for_power
+            not spa.connection_status.spa_connected
+            or not spa.needs_diagnostics_for_power
         ):
-            debug_response = await self._safe_request(Endpoint.DEBUG_DATA)
-            if debug_response:
-                with (
-                    contextlib.suppress(HotSpringError),
-                    _parsing(Endpoint.DEBUG_DATA),
-                ):
-                    self.spa.update_diagnostics(debug_response)
+            return
+        with contextlib.suppress(HotSpringError):
+            await self._fetch(Endpoint.DEBUG_DATA, spa.update_diagnostics)
 
     async def get_device_info(self) -> SpaInfo:
         """Fetch lightweight device identity directly from /startup.

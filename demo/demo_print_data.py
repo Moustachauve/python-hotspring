@@ -33,6 +33,11 @@ def print_identity(s: Spa) -> None:
     print(f"SNA Ready:      {s.info.sna_ready}")
 
 
+def _format_runtime(hours: float | None, seconds: int | None) -> str:
+    """Format runtime hours and seconds, or N/A when unavailable."""
+    return f"{hours:.2f}h ({seconds}s)" if hours is not None else "N/A"
+
+
 def print_heater_and_jets(s: Spa) -> None:
     """Print heater and jets info."""
     print("\n" + "=" * 20)
@@ -45,11 +50,7 @@ def print_heater_and_jets(s: Spa) -> None:
     print(f"Heating Mode: {s.heater.heating_mode.value}")
     print(f"Heater Lock:  {s.heater.heater_lock}")
     print(f"Heat Pump:    {s.heater.heatpump_installed}")
-    uptime = (
-        f"{s.system_uptime_hours:.2f} hrs ({s.system_uptime_seconds} s)"
-        if s.system_uptime_hours is not None
-        else "N/A"
-    )
+    uptime = _format_runtime(s.system_uptime_hours, s.system_uptime_seconds)
     print(f"System Uptime: {uptime}")
 
     print("\n" + "=" * 20)
@@ -60,21 +61,13 @@ def print_heater_and_jets(s: Spa) -> None:
         extra = ""
         if jet.concurrent_mode:
             extra += " Concurrent=True"
-        runtime = (
-            f"{jet.on_hours:.2f}h ({jet.on_seconds}s)"
-            if jet.on_hours is not None
-            else "N/A"
-        )
+        runtime = _format_runtime(jet.on_hours, jet.on_seconds)
         print(
             f"Jet {jet.jet_id:1}: Available={jet.is_available!s:5} "
             f"SpeedType={jet.speed_type.value:11} State={jet.speed.value:10} "
             f"Supported=[{supported}] Runtime={runtime}{extra}"
         )
-    blower_runtime = (
-        f"{s.blower.on_hours:.2f}h ({s.blower.on_seconds}s)"
-        if s.blower.on_hours is not None
-        else "N/A"
-    )
+    blower_runtime = _format_runtime(s.blower.on_hours, s.blower.on_seconds)
     print(
         f"Blower: Status={'ON' if s.blower.is_on else 'OFF':3} "
         f"Enabled={s.blower.is_enabled} Runtime={blower_runtime}"
