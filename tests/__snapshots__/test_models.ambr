@@ -290,6 +290,22 @@
     4021,
   )
 # ---
+# name: TestPowerMetrics.test_reconstructed_load_states[idle_synced]
+  tuple(
+    PowerMetrics(
+      heater_current=0,
+      heater_power=0,
+      jet1_jet2_blower_current=0,
+      jet1_jet2_blower_power=0,
+      jet3_current=0,
+      jet3_power=0,
+      small_loads_current=0,
+      small_loads_power=63,
+      supported=True,
+    ),
+    63,
+  )
+# ---
 # name: TestPowerMetrics.test_reconstructed_load_states[jet1_low]
   tuple(
     PowerMetrics(
@@ -354,7 +370,7 @@
     None,
   )
 # ---
-# name: TestPowerMetrics.test_status_only_power_metrics[idle_supported]
+# name: TestPowerMetrics.test_status_only_power_metrics[idle_awaiting_baseline_debug]
   tuple(
     PowerMetrics(
       heater_current=0,
@@ -368,6 +384,22 @@
       supported=True,
     ),
     63,
+  )
+# ---
+# name: TestPowerMetrics.test_status_only_power_metrics[jet1_awaiting_debug]
+  tuple(
+    PowerMetrics(
+      heater_current=0,
+      heater_power=0,
+      jet1_jet2_blower_current=None,
+      jet1_jet2_blower_power=1819,
+      jet3_current=0,
+      jet3_power=0,
+      small_loads_current=None,
+      small_loads_power=72,
+      supported=True,
+    ),
+    1891,
   )
 # ---
 # name: TestPowerMetrics.test_status_only_power_metrics[jet3_awaiting_debug]
