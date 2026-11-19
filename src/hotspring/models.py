@@ -183,7 +183,7 @@ class Spa:
             return
 
         fresh_power = _decode_registers(_NO_HEAD_WORDS, status_words, _NO_TAIL_WORDS)
-        if fresh_power.get("small_loads_power", 0) <= 0:
+        if fresh_power["small_loads_power"] <= 0:
             self.power = PowerMetrics()
             self._pending_status_words = _NO_STATUS_WORDS
             return
