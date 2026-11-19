@@ -918,17 +918,30 @@ class TestPowerMetrics:
         spa.update_diagnostics(debug_data)
         assert spa.needs_diagnostics_for_power is expected
 
-    def test_total_power(self) -> None:
+    @pytest.mark.parametrize(
+        ("power", "expected_total"),
+        [
+            pytest.param(
+                PowerMetrics(
+                    supported=True,
+                    small_loads_power=63,
+                    jet1_jet2_blower_power=1806,
+                    heater_power=3903,
+                    jet3_power=0,
+                ),
+                5772,
+                id="all_circuits_known",
+            ),
+            pytest.param(
+                PowerMetrics(supported=True, small_loads_power=63),
+                None,
+                id="partial_circuits",
+            ),
+        ],
+    )
+    def test_total_power(self, power: PowerMetrics, expected_total: int | None) -> None:
         """Test derived total_power across known and incomplete circuit readings."""
-        full = PowerMetrics(
-            supported=True,
-            small_loads_power=63,
-            jet1_jet2_blower_power=1806,
-            heater_power=3903,
-            jet3_power=0,
-        )
-        assert full.total_power == 5772
-        assert PowerMetrics(supported=True, small_loads_power=63).total_power is None
+        assert power.total_power == expected_total
 
     @pytest.mark.parametrize(
         "status_update",
@@ -952,6 +965,18 @@ class TestPowerMetrics:
             pytest.param(
                 {"heater": {"status": {"heater": "on", "heaterCurrent": 16128}}},
                 id="standalone_heater_current_ignored",
+            ),
+            pytest.param(
+                {
+                    "test_data": {
+                        "status": {
+                            "jet1+jet2+blowerCurrent": 0,
+                            "smallLoadsCurrent": 0,
+                            "heaterCurrent": 16128,
+                        }
+                    }
+                },
+                id="incomplete_test_data_status_ignored",
             ),
         ],
     )
@@ -1631,6 +1656,7 @@ class TestSpa:  # pylint: disable=too-many-public-methods
             spa.jets[2].on_seconds,
             spa.jets[3].on_seconds,
             spa.blower.on_seconds,
+            spa.blower.on_hours,
         ) == snapshot
 
     def test_partial_update_versions(self, status_response: dict[str, object]) -> None:
