@@ -737,7 +737,7 @@ class TestMalformedResponse:
                 id="empty_string_number",
             ),
             pytest.param(
-                {"heater": {"status": {"heaterHours": None}}},
+                {"test_data": {"status": {"tempOffset": None}}},
                 TypeError,
                 id="null_number",
             ),

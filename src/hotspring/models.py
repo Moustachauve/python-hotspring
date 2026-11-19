@@ -35,7 +35,7 @@ type _WordBlock = tuple[int | None, ...]
 type _PumpBlowerState = tuple[JetSpeed, JetSpeed, bool] | None
 type _CircuitStates = tuple[bool, bool, _PumpBlowerState]
 
-_NO_HEAD_WORDS: _WordBlock = (None, None, None, None)
+_NO_HEAD_WORDS: _WordBlock = (None, None, None)
 _NO_STATUS_WORDS: _WordBlock = (None, None, None, None)
 _NO_TAIL_WORDS: _WordBlock = (None, None)
 
@@ -175,21 +175,22 @@ class Spa:
     ) -> None:
         """Update power metrics and pending words from a /status or echo dict."""
         status_words = _extract_status_words(data)
-        if status_words is not None:
-            self._pending_status_words = status_words
-            fresh_power = _decode_registers(
-                _NO_HEAD_WORDS, status_words, _NO_TAIL_WORDS
-            )
-        else:
-            if self._circuit_states != prior_states:
-                self._pending_status_words = _NO_STATUS_WORDS
-            fresh_power = {}
+        if status_words is None:
+            if self._circuit_states == prior_states:
+                return
+            self._pending_status_words = _NO_STATUS_WORDS
+            self._apply_power_words({}, prior_states=prior_states)
+            return
 
-        self._apply_power_words(
-            fresh_power,
-            prior_states=prior_states,
-            from_status=status_words is not None,
-        )
+        fresh_power = _decode_registers(_NO_HEAD_WORDS, status_words, _NO_TAIL_WORDS)
+        if fresh_power.get("small_loads_power", 0) <= 0:
+            self.power = PowerMetrics()
+            self._pending_status_words = _NO_STATUS_WORDS
+            return
+
+        self._pending_status_words = status_words
+        self.power = replace(self.power, supported=True)
+        self._apply_power_words(fresh_power, prior_states=prior_states)
 
     def update_info(self, data: dict[str, object]) -> None:
         """Update spa identity from /startup and /spamodel responses.
@@ -250,14 +251,19 @@ class Spa:
             data: The JSON response from GET /addDebugData.
 
         """
-        self.diagnostics, fresh_power, synced = _parse_diagnostics_and_electrical(
-            data,
-            existing=self.diagnostics,
-            status_words=self._pending_status_words,
+        self.diagnostics, debug_integers = _parse_diagnostics_and_electrical(
+            data, existing=self.diagnostics
         )
-        if synced:
-            self._pending_status_words = _NO_STATUS_WORDS
-            self._apply_power_words(fresh_power, prior_states=self._circuit_states)
+        if debug_integers is None:
+            return
+        status_words = self._pending_status_words
+        self._pending_status_words = _NO_STATUS_WORDS
+        fresh_power = _decode_registers(
+            tuple(debug_integers.get(key) for key in _DEBUG_HEAD_KEYS),
+            status_words,
+            tuple(debug_integers.get(key) for key in _DEBUG_TAIL_KEYS),
+        )
+        self._apply_power_words(fresh_power, prior_states=self._circuit_states)
 
     def update_freshwater_iq(self, data: dict[str, object]) -> None:
         """Update FreshWater IQ data from /getFWIQData response.
@@ -288,7 +294,7 @@ class Spa:
         decoded = {
             target: _decode_runtime_seconds(raw)
             for path, target in _RUNTIME_ROUTES
-            if (raw := _dig(data, path)) is not _MISSING
+            if (raw := _dig(data, path)) is not None
         }
         if not decoded:
             return
@@ -320,21 +326,12 @@ class Spa:
         fresh: dict[str, int],
         *,
         prior_states: _CircuitStates,
-        from_status: bool = False,
     ) -> None:
         """Merge freshly decoded power/current words and apply circuit gating."""
-        if from_status:
-            if fresh.get("small_loads_power", 0) <= 0:
-                self.power = PowerMetrics()
-                self._pending_status_words = _NO_STATUS_WORDS
-                return
-            power = replace(self.power, supported=True, **fresh)
-        else:
-            if not self.power.supported:
-                return
-            power = replace(self.power, **fresh)
+        if not self.power.supported:
+            return
 
-        updates: dict[str, int | None] = {}
+        updates: dict[str, int | None] = dict(fresh)
         for state, before, fields in zip(
             self._circuit_states, prior_states, _CIRCUIT_FIELDS, strict=True
         ):
@@ -343,7 +340,7 @@ class Spa:
             elif state != before:
                 for field in fields:
                     updates[field] = fresh.get(field)
-        self.power = replace(power, **updates)
+        self.power = replace(self.power, **updates)
 
     @property
     def _circuit_states(self) -> _CircuitStates:
@@ -1257,6 +1254,7 @@ class PowerMetrics:  # pylint: disable=too-many-instance-attributes
         )
         if None in parts:
             return None
+        # Filter narrows int | None for mypy.
         return sum(part for part in parts if part is not None)
 
 
@@ -1309,7 +1307,6 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
     circulation_pump_flow_status: str = "0"
     regulation_thermistor_temp_status: str = "0"
     limit_thermistor_status: str = "0"
-    l2_voltage_above_256v: bool | None = None
     jet3_volts: int | None = None
     daily_clean_cycle: int | None = None
     filter_1_minutes: int | None = None
@@ -1320,7 +1317,7 @@ class Diagnostics:  # pylint: disable=too-many-instance-attributes
         data: dict[str, object], existing: Diagnostics | None = None
     ) -> Diagnostics:
         """Create a Diagnostics instance from a GET /addDebugData response."""
-        diagnostics, _, _ = _parse_diagnostics_and_electrical(data, existing=existing)
+        diagnostics, _ = _parse_diagnostics_and_electrical(data, existing=existing)
         return diagnostics
 
 
@@ -1332,7 +1329,6 @@ _STATUS_ELECTRICAL_KEYS: tuple[str, ...] = (
 )
 
 _DEBUG_HEAD_KEYS: tuple[str, ...] = (
-    "L1_N_Volts",
     "L2_N_Volts",
     "Heater_Volts",
     "jet3_Volts",
@@ -1344,10 +1340,9 @@ _DEBUG_TAIL_KEYS: tuple[str, ...] = (
 )
 
 # HNA JSON is one byte out of phase with the controller register block.
-# Together, 4 debug head words + 4 /status test_data words + 2 debug tail words
-# form one 10-word sequence whose adjacent pairs yield these 9 registers.
+# Together, 3 debug head words + 4 /status test_data words + 2 debug tail words
+# form one 9-word sequence whose adjacent pairs yield these 8 registers.
 _REGISTER_NAMES: tuple[str, ...] = (
-    "jet3_volts",
     "jet1_jet2_blower_current",
     "small_loads_current",
     "heater_current",
@@ -1382,13 +1377,12 @@ _DEBUG_STRING_KEYS: dict[str, str] = {
 }
 
 _DEBUG_INTEGER_KEYS: tuple[str, ...] = (
+    "L1_N_Volts",
     *_DEBUG_HEAD_KEYS,
     *_DEBUG_TAIL_KEYS,
     "heaterPower",
     "jet3Power",
 )
-
-_MISSING = object()
 
 
 def _seconds_to_hours(seconds: int | None) -> float | None:
@@ -1399,11 +1393,11 @@ def _seconds_to_hours(seconds: int | None) -> float | None:
 
 
 def _dig(data: dict[str, object], path: tuple[str, ...]) -> object:
-    """Return nested dict value along ``path``, or ``_MISSING`` if absent."""
+    """Return nested dict value along ``path``, or ``None`` if absent."""
     cursor: object = data
     for key in path:
         if not isinstance(cursor, dict) or key not in cursor:
-            return _MISSING
+            return None
         cursor = cursor[key]
     return cursor
 
@@ -1416,7 +1410,7 @@ def _reconstruct_uint16(low_byte_word: int, high_byte_word: int) -> int:
 def _decode_registers(
     head: _WordBlock, status: _WordBlock, tail: _WordBlock
 ) -> dict[str, int]:
-    """Reconstruct 16-bit registers across the contiguous 10-word API stream."""
+    """Reconstruct 16-bit registers across the contiguous 9-word API stream."""
     words = (*head, *status, *tail)
     return {
         name: _reconstruct_uint16(low_word, high_word)
@@ -1454,17 +1448,16 @@ def _extract_status_words(data: dict[str, object]) -> _WordBlock | None:
 def _parse_diagnostics_and_electrical(
     data: dict[str, object],
     existing: Diagnostics | None = None,
-    status_words: _WordBlock = _NO_STATUS_WORDS,
-) -> tuple[Diagnostics, dict[str, int], bool]:
-    """Parse /addDebugData into Diagnostics, decoded electrical values, and sync."""
+) -> tuple[Diagnostics, dict[str, int] | None]:
+    """Parse /addDebugData into Diagnostics and raw integer electrical words."""
     base = existing or Diagnostics()
     debug_data = data.get("debugData")
     if not isinstance(debug_data, dict):
-        return base, {}, False
+        return base, None
 
     debug = debug_data.get("status")
     if not isinstance(debug, dict) or not debug:
-        return base, {}, False
+        return base, None
 
     string_fields = {
         attribute_name: str(debug[json_key])
@@ -1483,21 +1476,15 @@ def _parse_diagnostics_and_electrical(
         or any(value != "0" for value in string_fields.values())
         or any(value != 0 for value in parsed_integers.values())
     ):
-        return base, {}, False
-
-    registers = _decode_registers(
-        tuple(parsed_integers.get(key) for key in _DEBUG_HEAD_KEYS),
-        status_words,
-        tuple(parsed_integers.get(key) for key in _DEBUG_TAIL_KEYS),
-    )
+        return base, None
 
     kwargs: dict[str, object] = dict(string_fields)
     if "spaFailureState" in debug:
         kwargs["spa_failure_state"] = SpaFailureState.build(raw_failure)
-    if (jet3_volts := registers.pop("jet3_volts", None)) is not None:
-        kwargs["jet3_volts"] = jet3_volts
-    if "L1_N_Volts" in parsed_integers:
-        kwargs["l2_voltage_above_256v"] = bool(parsed_integers["L1_N_Volts"] & 0xFF)
+    if (l1_volts := parsed_integers.get("L1_N_Volts")) is not None and (
+        l2_volts := parsed_integers.get("L2_N_Volts")
+    ) is not None:
+        kwargs["jet3_volts"] = _reconstruct_uint16(l1_volts, l2_volts)
     if "smallLoadsPower" in parsed_integers:
         kwargs["daily_clean_cycle"] = (parsed_integers["smallLoadsPower"] >> 8) & 0xFF
     if "heaterPower" in parsed_integers:
@@ -1505,7 +1492,7 @@ def _parse_diagnostics_and_electrical(
     if "jet3Power" in parsed_integers:
         kwargs["filter_2_minutes"] = parsed_integers["jet3Power"]
 
-    return replace(base, **kwargs), registers, True
+    return replace(base, **kwargs), parsed_integers
 
 
 class _SectionParser(NamedTuple):
