@@ -130,7 +130,6 @@ def print_diagnostics(s: Spa) -> None:
     print("  DIAGNOSTICS (DEBUG)")
     print("=" * 20)
     print(f"Failure State:  {s.diagnostics.spa_failure_state.value}")
-    print(f"L2 >= 256V:     {s.diagnostics.l2_voltage_above_256v}")
     print(f"Jet 3 Volts:    {s.diagnostics.jet3_volts} V")
     print(
         f"Filter 1 / 2:   {s.diagnostics.filter_1_minutes} / {s.diagnostics.filter_2_minutes} min"
