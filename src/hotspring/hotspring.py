@@ -32,6 +32,7 @@ from .exceptions import (
     HotSpringNotReadyError,
     HotSpringSNADetectedError,
 )
+from .json_recovery import HNA_STATUS_BUFFER_LIMIT, recover_truncated_json
 from .models import (
     ConnectionStatus,
     Diagnostics,
@@ -87,7 +88,41 @@ class HotSpring:  # pylint: disable=too-many-public-methods
     validate_device: bool = True
     _close_session: bool = False
     _identity_loaded: bool = False
+    _status_truncation_logged: bool = False
     spa: Spa | None = None
+
+    def _parse_response_json(self, uri: str, body: str) -> dict[str, object]:
+        """Parse a JSON object body, recovering known HNA /status buffer truncation."""
+        try:
+            response_data = json.loads(body)
+        except json.JSONDecodeError as exception:
+            if (
+                uri == Endpoint.STATUS
+                and len(body.encode("utf-8")) == HNA_STATUS_BUFFER_LIMIT
+                and (recovered := recover_truncated_json(body)) is not None
+            ):
+                if not self._status_truncation_logged:
+                    _LOGGER.warning(
+                        "Response from %s was truncated at %d bytes by the HNA "
+                        "firmware buffer limit; recovered partial JSON payload",
+                        uri,
+                        HNA_STATUS_BUFFER_LIMIT,
+                    )
+                    self._status_truncation_logged = True
+                else:
+                    _LOGGER.debug(
+                        "Recovered truncated %d-byte JSON payload from %s",
+                        HNA_STATUS_BUFFER_LIMIT,
+                        uri,
+                    )
+                return recovered
+            msg = f"Invalid JSON response from {uri}: {body[:200]}"
+            raise HotSpringError(msg) from exception
+
+        if not isinstance(response_data, dict):
+            msg = f"Unexpected response type from {uri}"
+            raise HotSpringError(msg)
+        return response_data
 
     async def request(
         self,
@@ -168,15 +203,7 @@ class HotSpring:  # pylint: disable=too-many-public-methods
                     # so always try JSON parsing first.
                     body = await response.text()
 
-                try:
-                    response_data = json.loads(body)
-                except json.JSONDecodeError as exception:
-                    msg = f"Invalid JSON response from {uri}: {body[:200]}"
-                    raise HotSpringError(msg) from exception
-
-                if not isinstance(response_data, dict):
-                    msg = f"Unexpected response type from {uri}"
-                    raise HotSpringError(msg)
+                response_data = self._parse_response_json(uri, body)
 
             except asyncio.TimeoutError as exception:
                 attempts += 1
