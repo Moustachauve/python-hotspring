@@ -35,6 +35,7 @@ from hotspring.const import (
     LightColor,
     LightWheelMode,
 )
+from hotspring.json_recovery import HNA_STATUS_BUFFER_LIMIT
 
 if TYPE_CHECKING:
     from syrupy.assertion import SnapshotAssertion
@@ -2091,3 +2092,178 @@ class TestEndpoint:
 
         assert all(isinstance(uri, Endpoint) for uri in client.requested)
         assert set(client.requested) == set(Endpoint)
+
+
+def _build_truncated_status(tail_marker: str, tail_replacement: str) -> str:
+    """Build an exact 3,071-byte truncated /status payload from status.json."""
+    payload: dict[str, object] = json.loads(_load("status.json"))
+    payload.pop("energySavings", None)
+    payload["energySavings"] = {
+        "energySaving1": {
+            "status": {"mode": 1, "startHour": 20, "startMinute": 0, "duration": 6}
+        },
+        "energySaving2": {
+            "status": {"mode": 1, "startHour": 2, "startMinute": 0, "duration": 16}
+        },
+    }
+    wire = "\n".join(
+        line.lstrip() for line in json.dumps(payload, indent=2).splitlines()
+    )
+    idx = wire.rfind(tail_marker)
+    body = wire[:idx] + tail_replacement
+    padding = HNA_STATUS_BUFFER_LIMIT - len(body.encode("utf-8"))
+    assert padding >= 0
+    truncated = "{\n" + (" " * padding) + body[2:]
+    assert len(truncated.encode("utf-8")) == HNA_STATUS_BUFFER_LIMIT
+    return truncated
+
+
+def _add_truncated_status_mocks(aresponses: ResponsesMockServer, body: str) -> None:
+    """Register /status with raw truncated text plus standard secondary endpoints."""
+    host = "192.168.1.100"
+    aresponses.add(
+        host,
+        Endpoint.STATUS,
+        HTTPMethod.GET,
+        Response(status=200, headers={"Content-Type": "text/html"}, text=body),
+    )
+    aresponses.add(
+        host, Endpoint.STARTUP, HTTPMethod.GET, _json_response("startup.json")
+    )
+    aresponses.add(
+        host,
+        Endpoint.SPA_CONNECT_STATUS,
+        HTTPMethod.GET,
+        _json_response("spa_connect_status.json"),
+    )
+    aresponses.add(
+        host, Endpoint.SPA_MODEL, HTTPMethod.GET, _json_response("spamodel.json")
+    )
+    aresponses.add(
+        host, Endpoint.DEBUG_DATA, HTTPMethod.GET, _json_response("debug_data.json")
+    )
+
+
+class TestTruncatedStatusResponse:
+    """Tests for recovering from the HNA 3,071-byte /status firmware buffer limit."""
+
+    async def test_update_recovers_3071_byte_truncated_status(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test 3,071-byte /status truncated before closing braces still succeeds."""
+        body = _build_truncated_status('"duration": 16', '"duration": 6 ')
+        _add_truncated_status_mocks(aresponses, body)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+
+        assert spa.heater.set_temperature == 100.0
+        assert spa.freshwater_iq.ph == 7.5
+        assert spa.versions.control_box == "EG25.2100K0"
+        assert spa.energy_savings[1].duration == 6
+        assert spa.energy_savings[2].start_hour == 2
+        assert spa.energy_savings[2].duration == 6
+
+    async def test_update_recovers_truncated_status_mid_number(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test mid-number truncation drops the cut value instead of corrupting it."""
+        body = _build_truncated_status('"duration": 16', '"duration": 1')
+        _add_truncated_status_mocks(aresponses, body)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+
+        assert spa.energy_savings[2].start_hour == 2
+        assert spa.energy_savings[2].duration == 0
+
+    async def test_update_recovers_truncated_status_after_open_brace(
+        self, aresponses: ResponsesMockServer
+    ) -> None:
+        """Test truncation inside an empty nested object drops the incomplete item."""
+        body = _build_truncated_status(
+            '"energySaving2": {', '"energySaving2": {\n"status": {'
+        )
+        _add_truncated_status_mocks(aresponses, body)
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            spa = await client.update()
+
+        assert 1 in spa.energy_savings
+        assert 2 not in spa.energy_savings
+
+    async def test_truncated_status_logs_warning_once(
+        self, aresponses: ResponsesMockServer, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test truncated /status warns once and logs debug on subsequent polls."""
+        body = _build_truncated_status('"duration": 16', '"duration": 6 ')
+        _add_truncated_status_mocks(aresponses, body)
+        aresponses.add(
+            "192.168.1.100",
+            Endpoint.STATUS,
+            HTTPMethod.GET,
+            Response(status=200, headers={"Content-Type": "text/html"}, text=body),
+        )
+        aresponses.add(
+            "192.168.1.100",
+            Endpoint.SPA_CONNECT_STATUS,
+            HTTPMethod.GET,
+            _json_response("spa_connect_status.json"),
+        )
+        caplog.set_level(logging.DEBUG, logger="hotspring.hotspring")
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            await client.update()
+            await client.update()
+
+        warnings = [
+            rec.message
+            for rec in caplog.records
+            if rec.levelno == logging.WARNING and "3071" in rec.message
+        ]
+        debugs = [
+            rec.message
+            for rec in caplog.records
+            if rec.levelno == logging.DEBUG
+            and "Recovered truncated 3071-byte" in rec.message
+        ]
+        assert len(warnings) == 1
+        assert len(debugs) == 1
+
+    @pytest.mark.parametrize(
+        ("endpoint", "body"),
+        [
+            pytest.param(
+                Endpoint.STATUS,
+                '{"JET": {"JET1": {"status": {"speed": "off"',
+                id="short_truncated_status",
+            ),
+            pytest.param(
+                Endpoint.STARTUP,
+                _build_truncated_status('"duration": 16', '"duration": 6 '),
+                id="non_status_3071_bytes",
+            ),
+            pytest.param(
+                Endpoint.STATUS,
+                "<html>" + ("x" * (HNA_STATUS_BUFFER_LIMIT - 13)) + "</html>",
+                id="non_json_3071_bytes",
+            ),
+        ],
+    )
+    async def test_non_matching_truncation_raises_error(
+        self,
+        aresponses: ResponsesMockServer,
+        endpoint: Endpoint,
+        body: str,
+    ) -> None:
+        """Test payloads not matching /status 3,071-byte truncation still fail."""
+        aresponses.add(
+            "192.168.1.100",
+            endpoint,
+            HTTPMethod.GET,
+            Response(status=200, headers={"Content-Type": "text/html"}, text=body),
+        )
+        async with aiohttp.ClientSession() as session:
+            client = HotSpring(host="192.168.1.100", session=session)
+            with pytest.raises(HotSpringError, match="Invalid JSON"):
+                await client.request(endpoint)
