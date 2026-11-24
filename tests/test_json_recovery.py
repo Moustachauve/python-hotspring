@@ -11,9 +11,20 @@ from hotspring.json_recovery import recover_truncated_json
     ("truncated", "expected"),
     [
         pytest.param(
-            '{"a": 1, "es": {"s": {"duration": 6 ',
-            {"a": 1, "es": {"s": {"duration": 6}}},
+            '{"a": 1, "duration": 6 ',
+            {"a": 1, "duration": 6},
             id="delimited_number_at_eof",
+        ),
+        pytest.param(
+            '{"a": 1, "es": {"s": {"duration": 6 ',
+            {"a": 1},
+            id="unfinished_nested_object_dropped",
+        ),
+        pytest.param(
+            '{"es": {"es1": {"s": {"duration": 6}}, '
+            '"es2": {"s": {"mode": 1, "duration": 6 ',
+            {"es": {"es1": {"s": {"duration": 6}}}},
+            id="preserves_closed_sibling_drops_unfinished",
         ),
         pytest.param(
             '{"a": 1, "es": {"s": {"duration": 6 \n}\n}',
@@ -22,8 +33,13 @@ from hotspring.json_recovery import recover_truncated_json
         ),
         pytest.param(
             '{"a": 1, "es": {"s": {"mode": 2, "duration": 1',
-            {"a": 1, "es": {"s": {"mode": 2}}},
+            {"a": 1},
             id="mid_number",
+        ),
+        pytest.param(
+            '{"a": 1, "duration": 1',
+            {"a": 1},
+            id="mid_number_top_level",
         ),
         pytest.param(
             '{"a": 1, "current_pH": 6.',
@@ -44,6 +60,11 @@ from hotspring.json_recovery import recover_truncated_json
             '{"a": 1, "color": "MAGENTA"',
             {"a": 1, "color": "MAGENTA"},
             id="complete_string_value_at_eof",
+        ),
+        pytest.param(
+            '{"a": 1, "es": {"color": "MAGENTA"',
+            {"a": 1},
+            id="unfinished_nested_string_dropped",
         ),
         pytest.param(
             '{"a": 1, "startHo',
@@ -81,9 +102,14 @@ from hotspring.json_recovery import recover_truncated_json
             id="trailing_backslash_at_eof",
         ),
         pytest.param(
-            '{"a": [1, 2, 3',
-            {"a": [1, 2]},
+            '{"a": 1, "arr": [1, 2, 3',
+            {"a": 1},
             id="array_truncation",
+        ),
+        pytest.param(
+            "[1, 2, 3",
+            None,
+            id="top_level_array",
         ),
         pytest.param(
             "<html><body>500 error</body></html>",

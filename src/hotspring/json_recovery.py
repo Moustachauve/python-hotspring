@@ -1,14 +1,18 @@
-"""Helpers for recovering buffer-truncated JSON payloads from the HNA."""
+"""Helpers for recovering buffer-truncated JSON payloads from the HNA.
+
+The HNA firmware serializes GET /status into a fixed 3,072-byte (0xc00)
+buffer and null-terminates at index 3,071, returning HTTP 200 with truncated
+JSON when a spa's payload exceeds that capacity.
+"""
 
 from __future__ import annotations
 
 import json
 import re
 
-# The HNA firmware allocates a fixed 0xc00 (3,072-byte) buffer for GET /status
-# via frozen's json_printf and null-terminates at index 3,071, causing HTTP 200
-# responses with Content-Length: 3071 and truncated JSON when payloads exceed it.
-HNA_STATUS_BUFFER_LIMIT = 3071
+# Match one JSON token at a time: a complete double-quoted string, a structural
+# character, or a bare scalar run. An unterminated string at EOF fails to match
+# and exits the loop cleanly.
 _JSON_TOKEN_RE = re.compile(r'\s*(?P<tok>"(?:\\.|[^"\\])*"|[{}\[\]:,]|[^"\s{}\[\]:,]+)')
 _CONTAINER_CLOSERS: dict[str, str] = {"{": "}", "[": "]"}
 _SCALAR_DELIMITERS = frozenset(" \t\r\n,}]")
@@ -37,13 +41,14 @@ def _find_truncated_json_cut(body: str) -> tuple[int, str] | None:
         elif tok in ":,":
             expect_value = tok == ":" or (bool(stack) and stack[-1] == "]")
         elif tok.startswith('"'):
-            if expect_value:
+            if expect_value and len(stack) == 1:
                 safe_state = (pos, "".join(reversed(stack)))
-                expect_value = False
+            expect_value = False
         elif expect_value and pos == end:
             break
         elif expect_value and body[pos] in _SCALAR_DELIMITERS:
-            safe_state = (pos, "".join(reversed(stack)))
+            if len(stack) == 1:
+                safe_state = (pos, "".join(reversed(stack)))
             expect_value = False
         else:
             return None
@@ -53,8 +58,6 @@ def _find_truncated_json_cut(body: str) -> tuple[int, str] | None:
 
 def recover_truncated_json(body: str) -> dict[str, object] | None:
     """Recover a valid JSON object prefix from a buffer-truncated response."""
-    if not body.lstrip().startswith("{"):
-        return None
     if (cut := _find_truncated_json_cut(body)) is None:
         return None
     cut_pos, closers = cut
